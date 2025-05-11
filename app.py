@@ -75,7 +75,7 @@ st.markdown(
 )
 
 # Default shapefile path (update if needed)
-default_shapefile = 'attached_assets/gadm41_NGA_2.shp'
+default_shapefile = 'attached_assets/gadm41_NGA_2.geojson'
 
 # Sidebar configuration
 with st.sidebar:

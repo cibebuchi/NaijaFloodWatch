@@ -118,4 +118,62 @@ except Exception as e:
     st.error(f"Error loading baseline CSV: {e}")
     st.stop()
 
-# Placeholder: continue with app logic
+# Forecast and Historical Mode Logic
+if mode in ["Forecast", "Historical"]:
+    state_options = sorted(lga_gdf['State'].unique())
+    selected_state = st.selectbox("Select State", state_options)
+
+    filtered_lgas = lga_gdf[lga_gdf['State'] == selected_state]['LGA'].unique()
+    selected_lga = st.selectbox("Select Local Government Area (LGA)", sorted(filtered_lgas))
+
+    st.markdown(f"### Selected: {selected_lga}, {selected_state}")
+
+    # Get lat/lon for selected LGA
+    selected_row = lga_gdf[(lga_gdf['LGA'] == selected_lga) & (lga_gdf['State'] == selected_state)]
+    if selected_row.empty:
+        st.error("Selected LGA not found in dataset.")
+    else:
+        lat = selected_row.iloc[0]['lat']
+        lon = selected_row.iloc[0]['lon']
+
+        st.markdown(f"**Geographic Location**")
+        st.write(f"Latitude: {lat:.4f} | Longitude: {lon:.4f}")
+
+        # Forecast Mode
+        if mode == "Forecast":
+            forecast_date = st.date_input("Select Forecast Date", value=datetime.date.today())
+
+            with st.spinner("Fetching forecast data..."):
+                try:
+                    forecast_df = fetch_open_meteo_forecast(lat, lon, forecast_date.strftime("%Y-%m-%d"))
+                except HTTPError:
+                    st.error("Failed to fetch forecast data.")
+                    forecast_df = None
+
+            if forecast_df is not None and not forecast_df.empty:
+                baseline_val = baseline_map.get(selected_lga, None)
+
+                current_val = forecast_df.iloc[0]['discharge_max']
+                ratio = current_val / baseline_val if baseline_val else None
+
+                st.metric("Forecast (m³/s)", f"{current_val:.2f}")
+                st.metric("Baseline (m³/s)", f"{baseline_val:.2f}" if baseline_val else "N/A")
+                st.metric("Ratio", f"{ratio:.2f}" if ratio else "N/A")
+
+        # Historical Mode
+        elif mode == "Historical":
+            start_date = st.date_input("Start Date", value=datetime.date.today() - datetime.timedelta(days=7))
+            end_date = st.date_input("End Date", value=datetime.date.today())
+
+            if start_date >= end_date:
+                st.warning("Start date must be before end date")
+            else:
+                with st.spinner("Fetching historical data..."):
+                    try:
+                        hist_df = fetch_open_meteo_historical(lat, lon, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"))
+                        if hist_df is not None and not hist_df.empty:
+                            st.line_chart(hist_df.set_index("date")["discharge_max"])
+                        else:
+                            st.info("No historical data available for this range.")
+                    except Exception as e:
+                        st.error(f"Error fetching historical data: {e}")

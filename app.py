@@ -118,6 +118,23 @@ except Exception as e:
     st.error(f"Error loading baseline CSV: {e}")
     st.stop()
 
+# Show About Page
+if mode == "About":
+    st.markdown("""
+    ## 🌊 About NaijaFloodWatch
+
+    **NaijaFloodWatch** is a lightweight flood forecasting and monitoring app built for Nigerian local governments.
+
+    It combines forecast data from [Copernicus GloFAS](https://www.globalfloods.eu/) with past observations to give:  
+    ✅ Real-time river discharge forecasts  
+    ✅ Historical flood trends  
+    ✅ Location-based risk analysis  
+
+    **Goal:** Help local planners, disaster managers, and the public monitor flood hazards.
+    
+    **Built using:** Streamlit, Open-Meteo API, and Folium for geospatial interaction.
+    """)
+
 # Forecast and Historical Mode Logic
 if mode in ["Forecast", "Historical"]:
     state_options = sorted(lga_gdf['State'].unique())
@@ -160,6 +177,35 @@ if mode in ["Forecast", "Historical"]:
                 st.metric("Forecast (m³/s)", f"{current_val:.2f}")
                 st.metric("Baseline (m³/s)", f"{baseline_val:.2f}" if baseline_val else "N/A")
                 st.metric("Ratio", f"{ratio:.2f}" if ratio else "N/A")
+
+                if ratio is not None:
+                    if ratio <= 0.8:
+                        risk_level = "Low"
+                        risk_color = "#4CAF50"
+                    elif ratio <= 1.2:
+                        risk_level = "Medium"
+                        risk_color = "#FFC107"
+                    else:
+                        risk_level = "High"
+                        risk_color = "#F44336"
+
+                    st.markdown(f"""
+                        <div class='metric-container' style='border-left: 10px solid {risk_color};'>
+                        <div class='metric-value'>{risk_level}</div>
+                        <div class='metric-label'>Flood Risk Level</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+                st.subheader("📈 7-Day Forecast Time Series")
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=forecast_df['date'], y=forecast_df['discharge_max'],
+                                         mode='lines+markers', name='Forecast Discharge'))
+                if baseline_val:
+                    fig.add_trace(go.Scatter(x=forecast_df['date'], y=[baseline_val]*len(forecast_df),
+                                             mode='lines', name='Baseline', line=dict(dash='dash')))
+
+                fig.update_layout(height=350, xaxis_title='Date', yaxis_title='Discharge (m³/s)')
+                st.plotly_chart(fig, use_container_width=True)
 
         # Historical Mode
         elif mode == "Historical":

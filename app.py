@@ -145,7 +145,8 @@ if mode in ["Forecast", "Historical"]:
 
             with st.spinner("Fetching forecast data..."):
                 try:
-                    forecast_df = fetch_open_meteo_forecast(lat, lon, forecast_date.strftime("%Y-%m-%d"))
+                    forecast_df = fetch_open_meteo_forecast(lat, lon)
+                    forecast_df = forecast_df[forecast_df['date'] == forecast_date.strftime("%Y-%m-%d")]
                 except HTTPError:
                     st.error("Failed to fetch forecast data.")
                     forecast_df = None

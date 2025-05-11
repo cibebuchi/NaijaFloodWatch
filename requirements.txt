@@ -1,10 +1,9 @@
 streamlit
 pandas
-geopandas
-fiona
-shapely
-pyproj
 plotly
 folium
+shapely==2.0.1
+geopandas==0.14.1
+matplotlib
 streamlit-folium
-requestsmatplotlib
+requests

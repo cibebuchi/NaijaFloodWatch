@@ -9,7 +9,6 @@ from requests import HTTPError
 from shapely.geometry import Point
 from fetch_open_meteo import fetch_open_meteo_forecast, fetch_open_meteo_historical
 from utils import load_lga_gdf, load_baseline
-from static_map import create_static_map
 
 # Page configuration
 st.set_page_config(

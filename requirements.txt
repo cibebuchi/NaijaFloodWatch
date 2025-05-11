@@ -3,7 +3,8 @@ pandas==2.1.4
 plotly==5.18.0
 folium==0.14.0
 shapely==2.0.2
-geopandas==0.12.2
 matplotlib==3.7.3
 streamlit-folium==0.14.0
 requests==2.31.0
+geopandas==0.12.2
+fiona==1.8.22

@@ -50,7 +50,7 @@ SHAPEFILE = 'attached_assets/gadm41_NGA_2.geojson'
 BASELINE_CSV = 'attached_assets/baseline_20220914.csv'
 LOGO_PATH = 'attached_assets/logo.jpg'
 
-# Sidebar
+# Sidebar configuration
 with st.sidebar:
     try:
         st.image(LOGO_PATH, width=120)
@@ -88,7 +88,7 @@ except Exception as e:
 today = datetime.date.today()
 FORECAST_DAYS = 7
 
-# About
+# About mode
 if mode == "About":
     st.markdown(
         """
@@ -112,87 +112,97 @@ Copernicus GloFAS via Open-Meteo; baseline = discharge on 14 Sep 2022.
 4. View metrics and charts
 
 *Accuracy best for LGAs with Sep 2022 baseline.*
-        """
+"""
     )
     st.stop()
 
 # Reset state on mode change
 if st.session_state.get('mode') != mode:
-    for key in ['sel_lga','lat','lon','forecast_data','historical_data','last_fetch']:
+    for key in ['sel_lga', 'lat', 'lon', 'forecast_data', 'historical_data', 'last_fetch']:
         st.session_state.pop(key, None)
     st.session_state['mode'] = mode
 
-# Layout columns: selection vs display
-col_sel, col_disp = st.columns([1,2])
+# Main layout: selection and display
+col_sel, col_disp = st.columns([1, 2])
+
 with col_sel:
     st.subheader("📍 Select LGA & Date")
     states = sorted(lga_gdf['State'].unique())
-    state = st.selectbox("State:", ["All"]+states)
-    lgas = (lga_gdf[lga_gdf['State']==state]['LGA'].sort_values().tolist()
-            if state!="All" else sorted(lga_gdf['LGA']))
-    lga = st.selectbox("LGA:", lgas)
-    if lga:
-        sel = lga_gdf[lga_gdf['LGA']==lga].iloc[0]
-        st.session_state['sel_lga'] = lga
+    state_choice = st.selectbox("State:", ["All"] + states)
+    if state_choice != "All":
+        lga_list = sorted(lga_gdf[lga_gdf['State'] == state_choice]['LGA'])
+    else:
+        lga_list = sorted(lga_gdf['LGA'])
+    lga_choice = st.selectbox("LGA:", lga_list)
+    if lga_choice:
+        sel = lga_gdf[lga_gdf['LGA'] == lga_choice].iloc[0]
+        st.session_state['sel_lga'] = lga_choice
         st.session_state['lat'] = sel['lat']
         st.session_state['lon'] = sel['lon']
-    # Date selection: full range for historical, ±7 days for forecast
+    # Date input
     if mode == "Historical":
         date = st.date_input("Select date:", max_value=today, value=today)
     else:
         min_date = today - datetime.timedelta(days=FORECAST_DAYS)
         max_date = today + datetime.timedelta(days=FORECAST_DAYS)
         date = st.date_input("Select date:", min_value=min_date, max_value=max_date, value=today)
-    fetch = st.button("Fetch Data")("Fetch Data")
-
-with col_disp:("Select date:", min_value=min_date, max_value=max_date, value=today)
     fetch = st.button("Fetch Data")
 
 with col_disp:
     if 'sel_lga' not in st.session_state:
-        st.info("Please select an LGA and date, then click Fetch Data.")
+        st.info("Please select an LGA and date, then click 'Fetch Data'.")
     else:
-        lat = st.session_state['lat']; lon = st.session_state['lon']
+        lat = st.session_state['lat']
+        lon = st.session_state['lon']
         lga_name = st.session_state['sel_lga']
         baseline = baseline_map.get(lga_name)
 
         if fetch or st.session_state.get('last_fetch'):
             st.session_state['last_fetch'] = True
-            if mode=="Forecast":
-                with st.spinner("Fetching forecast..."):
+            if mode == "Forecast":
+                # Fetch and display forecast
+                with st.spinner("Fetching forecast data..."):
                     df = fetch_open_meteo_forecast(lat, lon, FORECAST_DAYS)
                 df['date'] = pd.to_datetime(df['date']).dt.date
                 st.session_state['forecast_data'] = df
 
-                # Plot full 7-day forecast
+                # Plot full 7-day forecast chart
                 fig = generate_time_series_chart(df, lga_name, baseline)
                 st.plotly_chart(fig, use_container_width=True)
 
-                # Metrics for selected date
+                # Display metrics for selected date
                 if date in df['date'].values:
-                    row = df[df['date']==date].iloc[0]
+                    row = df[df['date'] == date].iloc[0]
                     discharge = row['discharge_max']
-                    ratio = discharge/baseline if baseline else None
+                    ratio = discharge / baseline if baseline else None
                     level, color = determine_risk_level(ratio)
-                    m1,m2,m3,m4 = st.columns(4)
+                    m1, m2, m3, m4 = st.columns(4)
                     m1.metric("Forecast (m³/s)", f"{discharge:.2f}")
                     m2.metric("Baseline (m³/s)", f"{baseline:.2f}" if baseline else "-")
                     m3.metric("Ratio", f"{ratio:.2f}" if ratio else "-")
-                    m4.markdown(f"<div style='background-color:{color};padding:8px;border-radius:4px;text-align:center;'><strong>Risk: {level}</strong></div>", unsafe_allow_html=True)
+                    m4.markdown(
+                        f"<div style='background-color:{color};padding:8px;border-radius:4px;text-align:center;'>"
+                        f"<strong>Risk: {level}</strong></div>",
+                        unsafe_allow_html=True
+                    )
                 else:
-                    st.warning("Selected date outside forecast range; see full 7-day chart.")
+                    st.warning("Selected date outside forecast range; review full 7-day chart above.")
 
-            else:  # Historical
-                with st.spinner("Fetching historical..."):
-                    hist = fetch_open_meteo_historical(lat, lon, date.strftime('%Y-%m-%d'))
-                discharge = hist.iloc[0]['discharge_max']
+            else:
+                # Fetch and display historical
+                with st.spinner("Fetching historical data..."):
+                    hist_df = fetch_open_meteo_historical(lat, lon, date.strftime('%Y-%m-%d'))
+                discharge = hist_df.iloc[0]['discharge_max']
                 st.subheader(f"Observed discharge on {date:%Y-%m-%d}")
                 st.metric("Discharge (m³/s)", f"{discharge:.2f}")
 
 # Footer
-st.markdown("<hr><p style='text-align:center;'>Maintained and Created by Chibuike Ibebuchi and Itohan-Osa Abu</p>", unsafe_allow_html=True)
+st.markdown(
+    "<hr><p style='text-align:center;'>Maintained and Created by Chibuike Ibebuchi and Itohan-Osa Abu</p>",
+    unsafe_allow_html=True
+)
 
-# Commit:
+# Commit instructions:
 # git add app.py
-# git commit -m "Fix unterminated string in About markdown"
+# git commit -m "Fix syntax and duplicate blocks; correct layout for date input"
 # git push origin main

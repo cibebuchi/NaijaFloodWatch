@@ -94,24 +94,25 @@ if mode == "About":
         """
 ## Nigeria Flood Early-Warning System
 
-Provides flood risk monitoring and forecasting for LGAs across Nigeria.
+This dashboard provides flood risk monitoring and forecasting for Local Government Areas (LGAs) across Nigeria.
 
 **Key Features:**
-- Real-time 7-day forecasts
-- Risk assessment vs. September 2022 baseline
-- Single-day historical discharge
-- Manual 'Fetch Data' for updates
+- Real-time Forecasts: 7-day river discharge predictions for any LGA
+- Risk Assessment: Comparison against September 2022 flood baseline
+- Historical Analysis: Review river discharge data for past dates
+- LGA Selection: Select any Local Government Area for detailed information
 
 **Data Sources:**
-Copernicus GloFAS via Open-Meteo; baseline = discharge on 14 Sep 2022.
+The system uses hydrological data from the Copernicus Global Flood Awareness System (GloFAS) provided through the Open-Meteo API. Baseline values represent the river discharge during the significant flooding event of September 14, 2022.
 
-**Usage:**
-1. Select State & LGA
-2. Choose Forecast or Historical
-3. Pick date and click 'Fetch Data'
-4. View metrics and charts
+**Using The Dashboard:**
+1. Select a state and LGA from the dropdown menus
+2. View forecast or historical data based on your selected mode
+3. Analyze the river discharge values and risk levels
+4. Explore the 7-day forecast in the time series chart
 
-*Accuracy best for LGAs with Sep 2022 baseline.*
+**Disclaimer:**
+This engine may be more effective for LGAs that were affected by the September 2022 flood event, as these areas have established baseline values for more accurate risk assessment.
 """
     )
     st.stop()

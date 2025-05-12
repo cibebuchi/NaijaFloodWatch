@@ -149,8 +149,6 @@ if mode == "About":
     - High Risk: Current discharge > 120% of baseline
     """)
 
-# Forecast and Historical Mode Logic
-
 # Footer will be rendered at the very end of the app
 footer_html = """
 <p style='font-size: 12px; color: gray; text-align: center;'>
@@ -159,6 +157,8 @@ Maintained and Created by Chibuike Ibebuchi and Itohan-Osa Abu.
 </p>
 """
 st.markdown("---")
+
+# Forecast and Historical Mode Logic
 if mode in ["Forecast", "Historical"]:
     state_options = sorted(lga_gdf['State'].unique())
     selected_state = st.selectbox("Select State", state_options)
@@ -184,70 +184,128 @@ if mode in ["Forecast", "Historical"]:
 
         # Forecast Mode
         if mode == "Forecast":
-            forecast_df = fetch_open_meteo_forecast(lat, lon)
-            available_dates = pd.to_datetime(forecast_df['date']).dt.date.tolist()
-            forecast_date = st.date_input("Select Forecast Date", value=available_dates[0], min_value=available_dates[0], max_value=available_dates[-1])
-
             with st.spinner("Fetching forecast data..."):
                 try:
-                    # forecast_df already fetched above
-                    selected_day_df = forecast_df[forecast_df['date'] == forecast_date.strftime("%Y-%m-%d")]
-                except HTTPError:
-                    st.error("Failed to fetch forecast data.")
+                    # Fetch forecast data
+                    forecast_df = fetch_open_meteo_forecast(lat, lon)
+                    if forecast_df is None or forecast_df.empty:
+                        st.error("No forecast data available for the selected location.")
+                        st.stop()
+
+                    # Ensure 'date' column exists
+                    if 'date' not in forecast_df.columns:
+                        st.error("Forecast data does not contain a 'date' column.")
+                        st.stop()
+
+                    # Convert dates to datetime and extract date objects
+                    try:
+                        forecast_df['date'] = pd.to_datetime(forecast_df['date'])
+                        available_dates = forecast_df['date'].dt.date.tolist()
+                    except Exception as e:
+                        st.error(f"Error processing forecast dates: {e}")
+                        st.stop()
+
+                    # Validate number of dates
+                    if len(available_dates) < 1:
+                        st.error("No valid forecast dates available.")
+                        st.stop()
+                    elif len(available_dates) < 7:
+                        st.warning(f"Only {len(available_dates)} forecast dates available instead of 7.")
+
+                    # Ensure dates are unique and sorted
+                    available_dates = sorted(list(set(available_dates)))
+                    
+                    # Debugging output (remove after testing)
+                    st.write("Available forecast dates:", available_dates)
+
+                    # Configure date input for 7-day forecast
+                    forecast_date = st.date_input(
+                        "Select Forecast Date",
+                        value=available_dates[0],
+                        min_value=available_dates[0],
+                        max_value=available_dates[-1],
+                        help="Select a date within the 7-day forecast period."
+                    )
+
+                    # Filter data for the selected date
+                    selected_day_df = forecast_df[forecast_df['date'].dt.date == forecast_date]
+                    if selected_day_df.empty:
+                        st.warning(f"No forecast data available for {forecast_date}.")
+                        forecast_df = None
+
+                except HTTPError as e:
+                    st.error(f"Failed to fetch forecast data: {e}")
                     forecast_df = None
+                    st.stop()
+                except Exception as e:
+                    st.error(f"Unexpected error in forecast mode: {e}")
+                    forecast_df = None
+                    st.stop()
 
-            if forecast_df is not None and not forecast_df.empty:
+            # Process and display forecast data
+            if forecast_df is not None and not forecast_df.empty and not selected_day_df.empty:
                 baseline_val = baseline_map.get(selected_lga, None)
-                if not selected_day_df.empty:
-                    current_val = selected_day_df.iloc[0]['discharge_max']
-                    ratio = current_val / baseline_val if baseline_val else None
+                current_val = selected_day_df.iloc[0]['discharge_max']
+                ratio = current_val / baseline_val if baseline_val else None
 
-                    bg_color = "#e8f5e9" if ratio and ratio <= 0.8 else ("#fff8e1" if ratio <= 1.2 else "#ffebee")
-                    text_color = "#000"
+                # Determine risk level and colors
+                bg_color = "#e8f5e9" if ratio and ratio <= 0.8 else ("#fff8e1" if ratio <= 1.2 else "#ffebee")
+                text_color = "#000"
 
-                    st.markdown(f"""
-                        <div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
-    <div class='metric-value'>{current_val:.2f}</div>
-    <div class='metric-label'>Forecast (m³/s)</div>
-</div>
-<div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
-    <div class='metric-value'>{baseline_val:.2f}</div>
-    <div class='metric-label'>Baseline (m³/s)</div>
-</div>
-<div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
-    <div class='metric-value'>{ratio:.2f}</div>
-    <div class='metric-label'>Ratio</div>
-</div>
-<div class='metric-container' style='background-color: {bg_color}; color: {text_color};'>
-    <div class='metric-value'>
-        {'Low' if ratio <= 0.8 else 'Medium' if ratio <= 1.2 else 'High'}
-    </div>
-    <div class='metric-label'>Flood Risk Level</div>
-</div>
-                    """, unsafe_allow_html=True)
+                # Display metrics
+                st.markdown(f"""
+                    <div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
+                        <div class='metric-value'>{current_val:.2f}</div>
+                        <div class='metric-label'>Forecast (m³/s)</div>
+                    </div>
+                    <div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
+                        <div class='metric-value'>{baseline_val:.2f if baseline_val else 'N/A'}</div>
+                        <div class='metric-label'>Baseline (m³/s)</div>
+                    </div>
+                    <div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
+                        <div class='metric-value'>{ratio:.2f if ratio else 'N/A'}</div>
+                        <div class='metric-label'>Ratio</div>
+                    </div>
+                    <div class='metric-container' style='background-color: {bg_color}; color: {text_color};'>
+                        <div class='metric-value'>
+                            {'Low' if ratio and ratio <= 0.8 else 'Medium' if ratio and ratio <= 1.2 else 'High' if ratio else 'N/A'}
+                        </div>
+                        <div class='metric-label'>Flood Risk Level</div>
+                    </div>
+                """, unsafe_allow_html=True)
 
+                # Display 7-day forecast time series
                 st.subheader("📈 7-Day Forecast Time Series")
                 fig = go.Figure()
-                fig.add_trace(go.Scatter(x=forecast_df['date'], y=forecast_df['discharge_max'],
-                                         mode='lines+markers', name='Forecast Discharge'))
+                fig.add_trace(go.Scatter(
+                    x=forecast_df['date'],
+                    y=forecast_df['discharge_max'],
+                    mode='lines+markers',
+                    name='Forecast Discharge'
+                ))
                 if baseline_val:
-                    fig.add_trace(go.Scatter(x=forecast_df['date'], y=[baseline_val]*len(forecast_df),
-                                             mode='lines', name='Baseline', line=dict(dash='dash')))
+                    fig.add_trace(go.Scatter(
+                        x=forecast_df['date'],
+                        y=[baseline_val] * len(forecast_df),
+                        mode='lines',
+                        name='Baseline',
+                        line=dict(dash='dash')
+                    ))
 
-                fig.update_layout(height=350, xaxis_title='Date', yaxis_title='Discharge (m³/s)')
+                fig.update_layout(
+                    height=350,
+                    xaxis_title='Date',
+                    yaxis_title='Discharge (m³/s)',
+                    hovermode='x unified'
+                )
                 st.plotly_chart(fig, use_container_width=True)
-
-                # Footer placed at the bottom after all rendering
-                st.markdown("""
-<p style='font-size: 12px; color: gray; text-align: center;'>
-Nigeria Flood Early-Warning Dashboard | Data from Open-Meteo API | Updated: 2025-05-11 23:59 UTC<br>
-Maintained and Created by Chibuike Ibebuchi and Itohan-Osa Abu.
-</p>
-""", unsafe_allow_html=True)
 
         # Historical Mode
         elif mode == "Historical":
-            hist_date = st.date_input("Select Historical Date", value=datetime.date.today() - datetime.timedelta(days=3))
+            hist_date = st.date_input(
+                "Select Historical Date",
+                value=datetime.date.today() - datetime.timedelta(days=3)
+            )
 
             with st.spinner("Fetching historical data..."):
                 try:

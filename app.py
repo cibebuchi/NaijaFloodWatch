@@ -1,3 +1,4 @@
+import os
 import datetime
 import streamlit as st
 import pandas as pd
@@ -53,16 +54,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Default asset paths
-default_shapefile = 'attached_assets/gadm41_NGA_2.json'
+# GeoJSON file now named with .geojson extension
+default_shapefile = 'attached_assets/gadm41_NGA_2.geojson'
 default_baseline_csv = 'attached_assets/baseline_20220914.csv'
 
 # Sidebar configuration
 with st.sidebar:
-    # Display logo if available, else skip
+    # Display logo.jpg (preferred) and skip if missing
     try:
-        st.image('logo.jpeg', width=150)
+        st.image('logo.jpg', width=150)
     except Exception:
         pass
+
     shapefile_path = default_shapefile
     baseline_csv = default_baseline_csv
 
@@ -81,8 +84,8 @@ with st.sidebar:
 # Load GeoJSON for LGAs
 try:
     lga_gdf = load_lga_gdf(shapefile_path)
-    if lga_gdf is None:
-        raise ValueError("Empty GeoDataFrame")
+    if lga_gdf is None or lga_gdf.empty:
+        raise FileNotFoundError(f"GeoJSON not found or empty at {shapefile_path}")
 except Exception as e:
     st.error(f"Error loading GeoJSON: {e}")
     st.stop()
@@ -193,74 +196,5 @@ with results_col:
             st.markdown(f"### Forecast for {date:%B %d, %Y}")
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Forecast (m³/s)", f"{discharge:.2f}")
-            m2.metric("Baseline (m³/s)", f"{baseline:.2f}" if baseline else "-")
-            m3.metric("Ratio", f"{ratio:.2f}" if ratio else "-")
-            m4.markdown(
-                f"<div style='background-color:{risk_color};padding:10px;border-radius:5px;text-align:center;'>"
-                f"<span style='color:white;font-weight:bold;'>Risk: {risk_level}</span></div>",
-                unsafe_allow_html=True,
-            )
-            fig = generate_time_series_chart(df, lga, baseline)
-            if fig:
-                st.plotly_chart(fig, use_container_width=True)
+            m2.metric
 
-    else:
-        # Single‐date Historical mode
-        st.subheader("📜 Historical Data")
-        if 'sel_lga' not in st.session_state:
-            st.info("Please select a state and LGA to view historical data.")
-        else:
-            lga = st.session_state['sel_lga']
-            lat = st.session_state['lat']
-            lon = st.session_state['lon']
-            baseline = baseline_map.get(lga)
-
-            hist_date = st.date_input(
-                "Select historical date",
-                min_value=datetime.date(2022, 9, 14),
-                max_value=today,
-                value=today,
-            )
-
-            if ('hist_date_fetched' not in st.session_state or
-                    st.session_state['hist_date_fetched'] != hist_date):
-                try:
-                    with st.spinner("Fetching historical data…"):
-                        hist_df = fetch_open_meteo_historical(
-                            lat,
-                            lon,
-                            start_date=hist_date.strftime("%Y-%m-%d"),
-                        )
-                    if hist_df is None or hist_df.empty:
-                        st.error("No data available for the selected date.")
-                        st.session_state['historical_data'] = None
-                    else:
-                        st.session_state['historical_data'] = hist_df
-                    st.session_state['hist_date_fetched'] = hist_date
-                except Exception as e:
-                    st.error(f"Error fetching historical: {e}")
-                    st.session_state['historical_data'] = None
-
-            hist_df = st.session_state.get('historical_data')
-            if hist_df is None:
-                st.stop()
-
-            obs = float(hist_df.loc[0, 'discharge_max'])
-            ratio = (obs / baseline) if baseline else None
-            risk_level, risk_color = determine_risk_level(ratio)
-
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Observed (m³/s)", f"{obs:.2f}")
-            c2.metric("Baseline (m³/s)", f"{baseline:.2f}" if baseline else "-")
-            c3.metric("Ratio", f"{ratio:.2f}" if ratio else "-")
-            c4.markdown(
-                f"<div style='background-color:{risk_color};padding:10px;border-radius:5px;text-align:center;'>"
-                f"<span style='color:white;font-weight:bold;'>Risk: {risk_level}</span></div>",
-                unsafe_allow_html=True,
-            )
-
-# Footer
-st.markdown(
-    "<hr><p style='text-align:center;'>Maintained and Created by Chibuike Ibebuchi and Itohan-Osa Abu</p>",
-    unsafe_allow_html=True,
-)

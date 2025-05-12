@@ -106,8 +106,8 @@ try:
         st.error("Failed to load shapefile data.")
         st.stop()
 
+
 # App Footer
-st.markdown("---")
 st.markdown("""
 <p style='font-size: 12px; color: gray; text-align: center;'>
 Nigeria Flood Early-Warning Dashboard | Data from Open-Meteo API | Updated: 2025-05-11 23:59 UTC<br>

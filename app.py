@@ -189,7 +189,7 @@ if mode in ["Forecast", "Historical"]:
 
         # Forecast Mode
         if mode == "Forecast":
-                                                                                            forecast_df = fetch_open_meteo_forecast(lat, lon)
+                                                                                                                    forecast_df = fetch_open_meteo_forecast(lat, lon)
             available_dates = pd.to_datetime(forecast_df['date']).dt.date.tolist()
             forecast_date = st.date_input("Select Forecast Date", value=available_dates[0], min_value=available_dates[0], max_value=available_dates[-1])
 

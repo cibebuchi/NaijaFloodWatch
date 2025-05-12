@@ -136,9 +136,16 @@ with col_sel:
         st.session_state['sel_lga'] = lga
         st.session_state['lat'] = sel['lat']
         st.session_state['lon'] = sel['lon']
-    min_date = today - datetime.timedelta(days=FORECAST_DAYS)
-    max_date = today if mode=="Historical" else today + datetime.timedelta(days=FORECAST_DAYS)
-    date = st.date_input("Select date:", min_value=min_date, max_value=max_date, value=today)
+    # Date selection: full range for historical, ±7 days for forecast
+    if mode == "Historical":
+        date = st.date_input("Select date:", max_value=today, value=today)
+    else:
+        min_date = today - datetime.timedelta(days=FORECAST_DAYS)
+        max_date = today + datetime.timedelta(days=FORECAST_DAYS)
+        date = st.date_input("Select date:", min_value=min_date, max_value=max_date, value=today)
+    fetch = st.button("Fetch Data")("Fetch Data")
+
+with col_disp:("Select date:", min_value=min_date, max_value=max_date, value=today)
     fetch = st.button("Fetch Data")
 
 with col_disp:

@@ -104,11 +104,25 @@ if mode == "About":
         """
 ## Nigeria Flood Early-Warning System
 
-This dashboard provides 7-day river discharge forecasts and single-day historical data for LGAs in Nigeria.
+This dashboard provides flood risk monitoring and forecasting for Local Government Areas (LGAs) across Nigeria.
 
-- **Forecast**: future discharge forecasts from Open-Meteo's GloFAS API.
-- **Historical**: observed discharge for a specific past date.
-- **Risk assessment**: compares discharge against baseline values from 14 September 2022.
+**Key Features:**
+- Real-time Forecasts: 7-day river discharge predictions for any LGA
+- Risk Assessment: Comparison against September 2022 flood baseline
+- Historical Analysis: Review river discharge data for past dates
+- LGA Selection: Select any Local Government Area for detailed information
+
+**Data Sources:**
+The system uses hydrological data from the Copernicus Global Flood Awareness System (GloFAS) provided through the Open-Meteo API. Baseline values represent the river discharge during the significant flooding event of September 14, 2022.
+
+**Using The Dashboard:**
+1. Select a state and LGA from the dropdown menus
+2. View forecast or historical data based on your selected mode
+3. Analyze the river discharge values and risk levels
+4. Explore the 7-day forecast in the time series chart
+
+**Disclaimer:**
+This engine may be more effective for LGAs that were affected by the September 2022 flood event, as these areas have established baseline values for more accurate risk assessment. Also the forecast value does not automatically update when date or LGA is changed.
 """
     )
     st.stop()
@@ -129,10 +143,14 @@ with col1:
     chosen_lga = st.selectbox("Select Local Government Area:", [""] + lgas)
     if chosen_lga:
         sel = lga_gdf[lga_gdf['LGA']==chosen_lga].iloc[0]
+        # Update selected LGA and clear previous data caches
         st.session_state['sel_lga'] = sel['LGA']
         st.session_state['sel_state'] = sel['State']
         st.session_state['lat'] = sel['lat']
         st.session_state['lon'] = sel['lon']
+        for cache_key in ['forecast_data', 'historical_data', 'hist_date_fetched']:
+            st.session_state.pop(cache_key, None)
+        st.experimental_rerun()
     if st.session_state.get('sel_lga'):
         st.success(f"Selected: {st.session_state['sel_lga']}, {st.session_state['sel_state']}")
         st.markdown(f"**Lat:** {st.session_state['lat']:.4f}°, **Lon:** {st.session_state['lon']:.4f}°")

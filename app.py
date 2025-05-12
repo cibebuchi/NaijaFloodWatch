@@ -105,6 +105,15 @@ try:
     if lga_gdf is None:
         st.error("Failed to load shapefile data.")
         st.stop()
+
+# App Footer
+st.markdown("---")
+st.markdown("""
+<p style='font-size: 12px; color: gray; text-align: center;'>
+Nigeria Flood Early-Warning Dashboard | Data from Open-Meteo API | Updated: 2025-05-11 23:59 UTC<br>
+Maintained and Created by Chibuike Ibebuchi and Itohan-Osa Abu.
+</p>
+""", unsafe_allow_html=True)
 except Exception as e:
     st.error(f"Error loading shapefile: {e}")
     st.stop()
@@ -150,18 +159,22 @@ if mode == "About":
     """)
 
 # Forecast and Historical Mode Logic
+st.markdown("---")
 if mode in ["Forecast", "Historical"]:
     state_options = sorted(lga_gdf['State'].unique())
     selected_state = st.selectbox("Select State", state_options)
 
     filtered_lgas = lga_gdf[lga_gdf['State'] == selected_state]['LGA'].unique()
     selected_lga = st.selectbox("Select Local Government Area (LGA)", sorted(filtered_lgas))
+    confirm_lga = st.button("Select LGA")
 
     st.markdown(f"### Selected: {selected_lga}, {selected_state}")
 
     # Get lat/lon for selected LGA
     selected_row = lga_gdf[(lga_gdf['LGA'] == selected_lga) & (lga_gdf['State'] == selected_state)]
-    if selected_row.empty:
+    if not confirm_lga:
+        st.info("Click 'Select LGA' to proceed.")
+    elif selected_row.empty:
         st.error("Selected LGA not found in dataset.")
     else:
         lat = selected_row.iloc[0]['lat']
@@ -177,36 +190,33 @@ if mode in ["Forecast", "Historical"]:
             with st.spinner("Fetching forecast data..."):
                 try:
                     forecast_df = fetch_open_meteo_forecast(lat, lon)
-                    forecast_df = forecast_df[forecast_df['date'] == forecast_date.strftime("%Y-%m-%d")]
+                    # Keep full forecast to plot 7-day trend
+                    selected_day_df = forecast_df[forecast_df['date'] == forecast_date.strftime("%Y-%m-%d")]
                 except HTTPError:
                     st.error("Failed to fetch forecast data.")
                     forecast_df = None
 
             if forecast_df is not None and not forecast_df.empty:
                 baseline_val = baseline_map.get(selected_lga, None)
+                if not selected_day_df.empty:
+                    current_val = selected_day_df.iloc[0]['discharge_max']
+                    ratio = current_val / baseline_val if baseline_val else None
 
-                current_val = forecast_df.iloc[0]['discharge_max']
-                ratio = current_val / baseline_val if baseline_val else None
-
-                st.metric("Forecast (m³/s)", f"{current_val:.2f}")
-                st.metric("Baseline (m³/s)", f"{baseline_val:.2f}" if baseline_val else "N/A")
-                st.metric("Ratio", f"{ratio:.2f}" if ratio else "N/A")
-
-                if ratio is not None:
-                    if ratio <= 0.8:
-                        risk_level = "Low"
-                        risk_color = "#4CAF50"
-                    elif ratio <= 1.2:
-                        risk_level = "Medium"
-                        risk_color = "#FFC107"
-                    else:
-                        risk_level = "High"
-                        risk_color = "#F44336"
+                    bg_color = "#e8f5e9" if ratio and ratio <= 0.8 else ("#fff8e1" if ratio <= 1.2 else "#ffebee")
+                    text_color = "#000"
 
                     st.markdown(f"""
-                        <div class='metric-container' style='border-left: 10px solid {risk_color};'>
-                        <div class='metric-value'>{risk_level}</div>
-                        <div class='metric-label'>Flood Risk Level</div>
+                        <div class='metric-container' style='background-color: {bg_color}; color: {text_color};'>
+                            <div class='metric-value'>{current_val:.2f}</div>
+                            <div class='metric-label'>Forecast (m³/s)</div>
+                        </div>
+                        <div class='metric-container' style='background-color: {bg_color}; color: {text_color};'>
+                            <div class='metric-value'>{baseline_val:.2f}</div>
+                            <div class='metric-label'>Baseline (m³/s)</div>
+                        </div>
+                        <div class='metric-container' style='background-color: {bg_color}; color: {text_color};'>
+                            <div class='metric-value'>{ratio:.2f}</div>
+                            <div class='metric-label'>Ratio</div>
                         </div>
                     """, unsafe_allow_html=True)
 
@@ -223,18 +233,14 @@ if mode in ["Forecast", "Historical"]:
 
         # Historical Mode
         elif mode == "Historical":
-            start_date = st.date_input("Start Date", value=datetime.date.today() - datetime.timedelta(days=7))
-            end_date = st.date_input("End Date", value=datetime.date.today())
+            hist_date = st.date_input("Select Historical Date", value=datetime.date.today() - datetime.timedelta(days=3))
 
-            if start_date >= end_date:
-                st.warning("Start date must be before end date")
-            else:
-                with st.spinner("Fetching historical data..."):
-                    try:
-                        hist_df = fetch_open_meteo_historical(lat, lon, start_date.strftime("%Y-%m-%d"))
-                        if hist_df is not None and not hist_df.empty:
-                            st.line_chart(hist_df.set_index("date")["discharge_max"])
-                        else:
-                            st.info("No historical data available for this range.")
-                    except Exception as e:
-                        st.error(f"Error fetching historical data: {e}")
+            with st.spinner("Fetching historical data..."):
+                try:
+                    hist_df = fetch_open_meteo_historical(lat, lon, hist_date.strftime("%Y-%m-%d"))
+                    if hist_df is not None and not hist_df.empty:
+                        st.metric("Historical Discharge (m³/s)", f"{hist_df.iloc[0]['discharge_max']:.2f}")
+                    else:
+                        st.info("No data available for this date.")
+                except Exception as e:
+                    st.error(f"Error fetching historical data: {e}")

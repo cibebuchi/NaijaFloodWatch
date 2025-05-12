@@ -69,9 +69,7 @@ with st.sidebar:
 """
         )
 
-# Load LGA GeoJSON
-today = datetime.date.today()
-FORECAST_DAYS = 7
+# Load data
 try:
     lga_gdf = load_lga_gdf(SHAPEFILE)
     if lga_gdf.empty:
@@ -80,12 +78,15 @@ except Exception as e:
     st.error(f"Error loading LGA data: {e}")
     st.stop()
 
-# Load baseline map
 try:
     baseline_map = load_baseline(BASELINE_CSV)
 except Exception as e:
     st.error(f"Error loading baseline CSV: {e}")
     st.stop()
+
+# Date settings
+today = datetime.date.today()
+FORECAST_DAYS = 7
 
 # About
 if mode == "About":
@@ -110,7 +111,8 @@ Copernicus GloFAS via Open-Meteo; baseline = discharge on 14 Sep 2022.
 3. Pick date and click 'Fetch Data'
 4. View metrics and charts
 
-*Accuracy best for LGAs with Sep 2022 baseline."
+*Accuracy best for LGAs with Sep 2022 baseline.*
+        """
     )
     st.stop()
 
@@ -185,5 +187,5 @@ st.markdown("<hr><p style='text-align:center;'>Maintained and Created by Chibuik
 
 # Commit:
 # git add app.py
-# git commit -m "Handle dates outside forecast, show full chart, and safe date metrics"
+# git commit -m "Fix unterminated string in About markdown"
 # git push origin main

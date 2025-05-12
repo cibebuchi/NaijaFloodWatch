@@ -110,13 +110,7 @@ except Exception as e:
     st.stop()
 
 
-# App Footer
-st.markdown("""
-<p style='font-size: 12px; color: gray; text-align: center;'>
-Nigeria Flood Early-Warning Dashboard | Data from Open-Meteo API | Updated: 2025-05-11 23:59 UTC<br>
-Maintained and Created by Chibuike Ibebuchi and Itohan-Osa Abu.
-</p>
-""", unsafe_allow_html=True)
+
 
 # Load baseline
 try:
@@ -236,6 +230,14 @@ if mode in ["Forecast", "Historical"]:
 
                 fig.update_layout(height=350, xaxis_title='Date', yaxis_title='Discharge (m³/s)')
                 st.plotly_chart(fig, use_container_width=True)
+
+                # Footer placed at the bottom after all rendering
+                st.markdown("""
+<p style='font-size: 12px; color: gray; text-align: center;'>
+Nigeria Flood Early-Warning Dashboard | Data from Open-Meteo API | Updated: 2025-05-11 23:59 UTC<br>
+Maintained and Created by Chibuike Ibebuchi and Itohan-Osa Abu.
+</p>
+""", unsafe_allow_html=True)
 
         # Historical Mode
         elif mode == "Historical":

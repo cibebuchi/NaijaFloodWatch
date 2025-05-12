@@ -206,15 +206,15 @@ if mode in ["Forecast", "Historical"]:
                     text_color = "#000"
 
                     st.markdown(f"""
-                        <div class='metric-container'>
+                        <div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
     <div class='metric-value'>{current_val:.2f}</div>
     <div class='metric-label'>Forecast (m³/s)</div>
 </div>
-<div class='metric-container'>
+<div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
     <div class='metric-value'>{baseline_val:.2f}</div>
     <div class='metric-label'>Baseline (m³/s)</div>
 </div>
-<div class='metric-container'>
+<div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
     <div class='metric-value'>{ratio:.2f}</div>
     <div class='metric-label'>Ratio</div>
 </div>

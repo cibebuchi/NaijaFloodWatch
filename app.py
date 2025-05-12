@@ -105,6 +105,9 @@ try:
     if lga_gdf is None:
         st.error("Failed to load shapefile data.")
         st.stop()
+except Exception as e:
+    st.error(f"Error loading shapefile: {e}")
+    st.stop()
 
 
 # App Footer

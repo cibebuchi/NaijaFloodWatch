@@ -216,8 +216,13 @@ if mode in ["Forecast", "Historical"]:
                         </div>
                         <div class='metric-container' style='background-color: {bg_color}; color: {text_color};'>
                             <div class='metric-value'>{ratio:.2f}</div>
-                            <div class='metric-label'>Ratio</div>
-                        </div>
+                            
+<div class='metric-container' style='background-color: {bg_color}; color: {text_color};'>
+    <div class='metric-value'>
+        {'Low' if ratio <= 0.8 else 'Medium' if ratio <= 1.2 else 'High'}
+    </div>
+    <div class='metric-label'>Flood Risk Level</div>
+</div>
                     """, unsafe_allow_html=True)
 
                 st.subheader("📈 7-Day Forecast Time Series")

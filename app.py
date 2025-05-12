@@ -244,41 +244,33 @@ if mode in ["Forecast", "Historical"]:
 
             # Process and display data only on form submission
             if submit:
-                selected_day_df = forecast_df[forecast_df['date'].dt.date == forecast_date]
+                selected_day_df = forecast_df[forecast_df['date'].dt.strftime('%Y-%m-%d') == forecast_date.strftime('%Y-%m-%d')]
                 if selected_day_df.empty:
                     st.warning(f"No forecast data available for {forecast_date}.")
                 else:
-                    current_val = selected_day_df.iloc[0]['discharge_max']
-                    ratio = current_val / baseline_val if baseline_val else None
+                    current_val = float(selected_day_df['discharge_max'].iloc[0]) if not selected_day_df.empty else None
+                    ratio = current_val / baseline_val if baseline_val and current_val else None
 
-                    # Determine risk level and colors
-                    bg_color = "#e8f5e9" if ratio and ratio <= 0.8 else ("#fff8e1" if ratio and ratio <= 1.2 else "#ffebee")
-                    text_color = "#000"
-
-                    # Format values for display
-                    baseline_display = f"{baseline_val:.2f}" if baseline_val is not None else "N/A"
-                    ratio_display = f"{ratio:.2f}" if ratio is not None else "N/A"
+                    # Determine risk level
                     risk_display = "Low" if ratio and ratio <= 0.8 else "Medium" if ratio and ratio <= 1.2 else "High" if ratio else "N/A"
+                    bg_color = "#e8f5e9" if risk_display == "Low" else "#fff8e1" if risk_display == "Medium" else "#ffebee" if risk_display == "High" else "#f7f7f7"
 
                     # Display metrics
-                    st.markdown(f"""
-                        <div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
-                            <div class='metric-value'>{current_val:.2f}</div>
-                            <div class='metric-label'>Forecast (m³/s)</div>
-                        </div>
-                        <div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
-                            <div class='metric-value'>{baseline_display}</div>
-                            <div class='metric-label'>Baseline (m³/s)</div>
-                        </div>
-                        <div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
-                            <div class='metric-value'>{ratio_display}</div>
-                            <div class='metric-label'>Ratio</div>
-                        </div>
-                        <div class='metric-container' style='background-color: {bg_color}; color: {text_color};'>
-                            <div class='metric-value'>{risk_display}</div>
-                            <div class='metric-label'>Flood Risk Level</div>
-                        </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(f"### Forecast for {forecast_date.strftime('%B %d, %Y')}")
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Forecast (m³/s)", f"{current_val:.2f}" if current_val else "-")
+                    with col2:
+                        st.metric("Baseline (m³/s)", f"{baseline_val:.2f}" if baseline_val else "-")
+                    with col3:
+                        st.metric("Ratio", f"{ratio:.2f}" if ratio else "-")
+                    with col4:
+                        st.markdown(f"""
+                            <div class='metric-container' style='background-color: {bg_color}; color: #000;'>
+                                <div class='metric-value'>{risk_display}</div>
+                                <div class='metric-label'>Flood Risk Level</div>
+                            </div>
+                        """, unsafe_allow_html=True)
 
             # Always display the time series chart if data is available
             if 'forecast_data' in st.session_state:
@@ -309,20 +301,30 @@ if mode in ["Forecast", "Historical"]:
 
         # Historical Mode
         elif mode == "Historical":
-            hist_date = st.date_input(
-                "Select Historical Date",
-                value=datetime.date.today() - datetime.timedelta(days=3)
-            )
+            with st.form("historical_form"):
+                hist_date = st.date_input(
+                    "Select Historical Date",
+                    value=datetime.date.today() - datetime.timedelta(days=1),
+                    min_value=datetime.date(1984, 1, 1),
+                    max_value=datetime.date.today() - datetime.timedelta(days=1),
+                    help="Select a date from 1984 to yesterday."
+                )
+                submit = st.form_submit_button("Retrieve Historical Data", use_container_width=True)
 
-            with st.spinner("Fetching historical data..."):
-                try:
-                    hist_df = fetch_open_meteo_historical(lat, lon, hist_date.strftime("%Y-%m-%d"))
-                    if hist_df is not None and not hist_df.empty:
-                        st.metric("Historical Discharge (m³/s)", f"{hist_df.iloc[0]['discharge_max']:.2f}")
-                    else:
-                        st.info("No data available for this date.")
-                except Exception as e:
-                    st.error(f"Error fetching historical data: {e}")
+            if submit:
+                with st.spinner("Fetching historical data..."):
+                    try:
+                        hist_df = fetch_open_meteo_historical(lat, lon, hist_date.strftime("%Y-%m-%d"))
+                        if hist_df is not None and not hist_df.empty:
+                            discharge = float(hist_df['discharge_max'].iloc[0]) if 'discharge_max' in hist_df.columns else None
+                            st.markdown(f"### Historical Data for {hist_date.strftime('%B %d, %Y')}")
+                            st.metric("Historical Discharge (m³/s)", f"{discharge:.2f}" if discharge else "-", delta=None)
+                        else:
+                            st.info("No data available for this date.")
+                    except HTTPError as e:
+                        st.error(f"API error fetching historical data: {e}")
+                    except Exception as e:
+                        st.error(f"Error fetching historical data: {e}")
 
 # Display footer at the very end
 st.markdown(footer_html, unsafe_allow_html=True)

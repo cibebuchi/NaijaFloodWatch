@@ -58,7 +58,11 @@ default_baseline_csv = 'attached_assets/baseline_20220914.csv'
 
 # Sidebar configuration
 with st.sidebar:
-    st.image('logo.jpeg', width=150)
+    # Display logo if available, else skip
+    try:
+        st.image('logo.jpeg', width=150)
+    except Exception:
+        pass
     shapefile_path = default_shapefile
     baseline_csv = default_baseline_csv
 

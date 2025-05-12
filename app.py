@@ -121,18 +121,32 @@ except Exception as e:
 # Show About Page
 if mode == "About":
     st.markdown("""
-    ## 🌊 About NaijaFloodWatch
+    ## NaijaFloodWatch
+    ### Nigeria Flood Early-Warning System
+    This dashboard provides flood risk monitoring and forecasting for Local Government Areas (LGAs) across Nigeria.
 
-    **NaijaFloodWatch** is a lightweight flood forecasting and monitoring app built for Nigerian local governments.
+    #### Key Features:
+    - Real-time Forecasts: 7-day river discharge predictions for any LGA
+    - Risk Assessment: Comparison against September 2022 flood baseline
+    - Historical Analysis: Review river discharge data for past dates
+    - LGA Selection: Select any Local Government Area for detailed information
 
-    It combines forecast data from [Copernicus GloFAS](https://www.globalfloods.eu/) with past observations to give:  
-    ✅ Real-time river discharge forecasts  
-    ✅ Historical flood trends  
-    ✅ Location-based risk analysis  
+    #### Data Sources:
+    The system uses hydrological data from the Copernicus Global Flood Awareness System (GloFAS) provided through the Open-Meteo API. Baseline values represent the river discharge during the significant flooding event of September 14, 2022.
 
-    **Goal:** Help local planners, disaster managers, and the public monitor flood hazards.
-    
-    **Built using:** Streamlit, Open-Meteo API, and Folium for geospatial interaction.
+    #### Using The Dashboard:
+    1. Select a state and LGA from the dropdown menus
+    2. View forecast or historical data based on your selected mode
+    3. Analyze the river discharge values and risk levels
+    4. Explore the 7-day forecast in the time series chart
+
+    #### Disclaimer:
+    This engine may be more effective for LGAs that were affected by the September 2022 flood event, as these areas have established baseline values for more accurate risk assessment.
+
+    #### Understanding Risk Indicators:
+    - Low Risk: Current discharge ≤ 80% of baseline
+    - Medium Risk: Current discharge between 80-120% of baseline
+    - High Risk: Current discharge > 120% of baseline
     """)
 
 # Forecast and Historical Mode Logic
@@ -217,7 +231,7 @@ if mode in ["Forecast", "Historical"]:
             else:
                 with st.spinner("Fetching historical data..."):
                     try:
-                        hist_df = fetch_open_meteo_historical(lat, lon, start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d"))
+                        hist_df = fetch_open_meteo_historical(lat, lon, start_date.strftime("%Y-%m-%d"))
                         if hist_df is not None and not hist_df.empty:
                             st.line_chart(hist_df.set_index("date")["discharge_max"])
                         else:

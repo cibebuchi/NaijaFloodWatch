@@ -184,93 +184,102 @@ if mode in ["Forecast", "Historical"]:
 
         # Forecast Mode
         if mode == "Forecast":
-            # Fetch forecast data only once per LGA selection
-            with st.spinner("Fetching forecast data..."):
-                try:
-                    forecast_df = fetch_open_meteo_forecast(lat, lon)
-                    if forecast_df is None or forecast_df.empty:
-                        st.error("No forecast data available for the selected location.")
-                        st.stop()
-
-                    # Ensure 'date' column exists
-                    if 'date' not in forecast_df.columns:
-                        st.error("Forecast data does not contain a 'date' column.")
-                        st.stop()
-
-                    # Convert dates to datetime and extract date objects
+            # Fetch forecast data only if not already in session state
+            if 'forecast_data' not in st.session_state or confirm_lga:
+                with st.spinner("Fetching forecast data..."):
                     try:
-                        forecast_df['date'] = pd.to_datetime(forecast_df['date'])
-                        available_dates = forecast_df['date'].dt.date.tolist()
+                        forecast_df = fetch_open_meteo_forecast(lat, lon)
+                        if forecast_df is None or forecast_df.empty:
+                            st.error("No forecast data available for the selected location.")
+                            st.stop()
+
+                        # Ensure 'date' column exists
+                        if 'date' not in forecast_df.columns:
+                            st.error("Forecast data does not contain a 'date' column.")
+                            st.stop()
+
+                        # Convert dates to datetime and extract date objects
+                        try:
+                            forecast_df['date'] = pd.to_datetime(forecast_df['date'])
+                            available_dates = forecast_df['date'].dt.date.tolist()
+                        except Exception as e:
+                            st.error(f"Error processing forecast dates: {e}")
+                            st.stop()
+
+                        # Validate number of dates
+                        if len(available_dates) < 1:
+                            st.error("No valid forecast dates available.")
+                            st.stop()
+                        elif len(available_dates) < 7:
+                            st.warning(f"Only {len(available_dates)} forecast dates available instead of 7.")
+
+                        # Ensure dates are unique and sorted
+                        available_dates = sorted(list(set(available_dates)))
+                        st.session_state['forecast_data'] = forecast_df
+                        st.session_state['available_dates'] = available_dates
+
+                    except HTTPError as e:
+                        st.error(f"Failed to fetch forecast data: {e}")
+                        st.stop()
                     except Exception as e:
-                        st.error(f"Error processing forecast dates: {e}")
+                        st.error(f"Unexpected error in forecast mode: {e}")
                         st.stop()
-
-                    # Validate number of dates
-                    if len(available_dates) < 1:
-                        st.error("No valid forecast dates available.")
-                        st.stop()
-                    elif len(available_dates) < 7:
-                        st.warning(f"Only {len(available_dates)} forecast dates available instead of 7.")
-
-                    # Ensure dates are unique and sorted
-                    available_dates = sorted(list(set(available_dates)))
-
-                except HTTPError as e:
-                    st.error(f"Failed to fetch forecast data: {e}")
-                    st.stop()
-                except Exception as e:
-                    st.error(f"Unexpected error in forecast mode: {e}")
-                    st.stop()
-
-            # Configure date input (runs on every date change)
-            forecast_date = st.date_input(
-                "Select Forecast Date",
-                value=available_dates[0],
-                min_value=available_dates[0],
-                max_value=available_dates[-1],
-                help="Select a date within the 7-day forecast period."
-            )
-
-            # Process data for the selected date
-            selected_day_df = forecast_df[forecast_df['date'].dt.date == forecast_date]
-            if selected_day_df.empty:
-                st.warning(f"No forecast data available for {forecast_date}.")
             else:
-                # Process and display forecast data
-                baseline_val = baseline_map.get(selected_lga, None)
-                current_val = selected_day_df.iloc[0]['discharge_max']
-                ratio = current_val / baseline_val if baseline_val else None
+                forecast_df = st.session_state['forecast_data']
+                available_dates = st.session_state['available_dates']
 
-                # Determine risk level and colors
-                bg_color = "#e8f5e9" if ratio and ratio <= 0.8 else ("#fff8e1" if ratio and ratio <= 1.2 else "#ffebee")
-                text_color = "#000"
+            # Form for date selection
+            with st.form("forecast_form"):
+                forecast_date = st.date_input(
+                    "Select Forecast Date",
+                    value=available_dates[0],
+                    min_value=available_dates[0],
+                    max_value=available_dates[-1],
+                    help="Select a date within the 7-day forecast period."
+                )
+                submit = st.form_submit_button("Generate Forecast", use_container_width=True)
 
-                # Format values for display
-                baseline_display = f"{baseline_val:.2f}" if baseline_val is not None else "N/A"
-                ratio_display = f"{ratio:.2f}" if ratio is not None else "N/A"
-                risk_display = "Low" if ratio and ratio <= 0.8 else "Medium" if ratio and ratio <= 1.2 else "High" if ratio else "N/A"
+            # Process and display data only on form submission
+            if submit:
+                selected_day_df = forecast_df[forecast_df['date'].dt.date == forecast_date]
+                if selected_day_df.empty:
+                    st.warning(f"No forecast data available for {forecast_date}.")
+                else:
+                    baseline_val = baseline_map.get(selected_lga, None)
+                    current_val = selected_day_df.iloc[0]['discharge_max']
+                    ratio = current_val / baseline_val if baseline_val else None
 
-                # Display metrics
-                st.markdown(f"""
-                    <div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
-                        <div class='metric-value'>{current_val:.2f}</div>
-                        <div class='metric-label'>Forecast (m³/s)</div>
-                    </div>
-                    <div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
-                        <div class='metric-value'>{baseline_display}</div>
-                        <div class='metric-label'>Baseline (m³/s)</div>
-                    </div>
-                    <div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
-                        <div class='metric-value'>{ratio_display}</div>
-                        <div class='metric-label'>Ratio</div>
-                    </div>
-                    <div class='metric-container' style='background-color: {bg_color}; color: {text_color};'>
-                        <div class='metric-value'>{risk_display}</div>
-                        <div class='metric-label'>Flood Risk Level</div>
-                    </div>
-                """, unsafe_allow_html=True)
+                    # Determine risk level and colors
+                    bg_color = "#e8f5e9" if ratio and ratio <= 0.8 else ("#fff8e1" if ratio and ratio <= 1.2 else "#ffebee")
+                    text_color = "#000"
 
-                # Display 7-day forecast time series
+                    # Format values for display
+                    baseline_display = f"{baseline_val:.2f}" if baseline_val is not None else "N/A"
+                    ratio_display = f"{ratio:.2f}" if ratio is not None else "N/A"
+                    risk_display = "Low" if ratio and ratio <= 0.8 else "Medium" if ratio and ratio <= 1.2 else "High" if ratio else "N/A"
+
+                    # Display metrics
+                    st.markdown(f"""
+                        <div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
+                            <div class='metric-value'>{current_val:.2f}</div>
+                            <div class='metric-label'>Forecast (m³/s)</div>
+                        </div>
+                        <div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
+                            <div class='metric-value'>{baseline_display}</div>
+                            <div class='metric-label'>Baseline (m³/s)</div>
+                        </div>
+                        <div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
+                            <div class='metric-value'>{ratio_display}</div>
+                            <div class='metric-label'>Ratio</div>
+                        </div>
+                        <div class='metric-container' style='background-color: {bg_color}; color: {text_color};'>
+                            <div class='metric-value'>{risk_display}</div>
+                            <div class='metric-label'>Flood Risk Level</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+            # Always display the time series chart if data is available
+            if 'forecast_data' in st.session_state:
                 st.subheader("📈 7-Day Forecast Time Series")
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(

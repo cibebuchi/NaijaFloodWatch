@@ -150,7 +150,7 @@ with col1:
         st.session_state['lon'] = sel['lon']
         for cache_key in ['forecast_data', 'historical_data', 'hist_date_fetched']:
             st.session_state.pop(cache_key, None)
-        st.experimental_rerun()
+        st.rerun()
     if st.session_state.get('sel_lga'):
         st.success(f"Selected: {st.session_state['sel_lga']}, {st.session_state['sel_state']}")
         st.markdown(f"**Lat:** {st.session_state['lat']:.4f}°, **Lon:** {st.session_state['lon']:.4f}°")
@@ -207,3 +207,5 @@ with col2:
 
 # Footer
 st.markdown("<hr><p style='text-align:center;'>Maintained and Created by Chibuike Ibebuchi and Itohan-Osa Abu</p>", unsafe_allow_html=True)
+
+

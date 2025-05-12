@@ -109,9 +109,6 @@ except Exception as e:
     st.error(f"Error loading shapefile: {e}")
     st.stop()
 
-
-
-
 # Load baseline
 try:
     baseline_map = load_baseline(baseline_csv)
@@ -120,8 +117,6 @@ try:
 except Exception as e:
     st.error(f"Error loading baseline CSV: {e}")
     st.stop()
-
-
 
 # Show About Page
 if mode == "About":
@@ -189,9 +184,9 @@ if mode in ["Forecast", "Historical"]:
 
         # Forecast Mode
         if mode == "Forecast":
-                                                                                                                            forecast_df = fetch_open_meteo_forecast(lat, lon)
-                    available_dates = pd.to_datetime(forecast_df['date']).dt.date.tolist()
-                    forecast_date = st.date_input("Select Forecast Date", value=available_dates[0], min_value=available_dates[0], max_value=available_dates[-1])
+            forecast_df = fetch_open_meteo_forecast(lat, lon)
+            available_dates = pd.to_datetime(forecast_df['date']).dt.date.tolist()
+            forecast_date = st.date_input("Select Forecast Date", value=available_dates[0], min_value=available_dates[0], max_value=available_dates[-1])
 
             with st.spinner("Fetching forecast data..."):
                 try:

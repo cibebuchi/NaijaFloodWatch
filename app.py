@@ -3,10 +3,7 @@ import datetime
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import folium
-from streamlit_folium import st_folium
 from requests import HTTPError
-from shapely.geometry import Point
 
 # Try importing utils
 try:
@@ -16,7 +13,6 @@ except ImportError as e:
     st.stop()
 
 from fetch_open_meteo import fetch_open_meteo_forecast, fetch_open_meteo_historical
-from static_map import create_static_map
 
 # Page configuration
 st.set_page_config(
@@ -81,14 +77,14 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Default shapefile path (update to GeoJSON)
+# Default GeoJSON path
 default_shapefile = 'attached_assets/gadm41_NGA_2.json'
 
 # Sidebar configuration
 with st.sidebar:
     st.image('logo.jpeg', width=150)
     
-    # Hidden configuration - not visible to users
+    # Hidden configuration
     shapefile_path = default_shapefile
     baseline_csv = 'attached_assets/baseline_20220914.csv'
     
@@ -109,7 +105,7 @@ with st.sidebar:
         - Data source: Copernicus GloFAS via Open-Meteo API
         """)
 
-# Load shapefile
+# Load GeoJSON
 try:
     lga_gdf = load_lga_gdf(shapefile_path)
     if lga_gdf is None:
@@ -162,26 +158,17 @@ if mode == "About":
     
     """)
     
-    # Display static map of Nigeria with LGAs
-    st.subheader("Nigeria Local Government Areas (LGAs)")
-    
-    # Generate static map
-    nigeria_map = create_static_map(shapefile_path)
-    
-    if nigeria_map:
-        st.pyplot(nigeria_map)
-    
-    # LGA selection interface below the map
+    # LGA selection interface
     st.subheader("LGA Selection Interface")
     
-    # Group by state for better organization
+    # Group by state
     states = sorted(lga_gdf['State'].unique())
     col1, col2 = st.columns(2)
     
     with col1:
         state_filter = st.selectbox("Filter by State:", ["All States"] + list(states), key="about_state_filter")
     
-    # Filter LGAs by selected state
+    # Filter LGAs by state
     if state_filter != "All States":
         filtered_lgas = sorted(lga_gdf[lga_gdf['State'] == state_filter]['LGA'].tolist())
     else:
@@ -219,7 +206,7 @@ if mode == "About":
         """, unsafe_allow_html=True)
 
 else:  # Forecast or Historical mode
-    # Clear cached forecast/historical results if changing modes
+    # Clear cached results if changing modes
     if 'last_mode' in st.session_state and st.session_state['last_mode'] != mode:
         for key in ['forecast_data', 'historical_data']:
             if key in st.session_state:
@@ -229,121 +216,55 @@ else:  # Forecast or Historical mode
     st.session_state['last_mode'] = mode
     
     # Create two columns for layout
-    map_col, results_col = st.columns([1, 1])
+    select_col, results_col = st.columns([1, 1])
     
-    # Map column
-    with map_col:
+    # LGA selection column
+    with select_col:
         st.subheader("📍 Nigeria LGA Selection")
         selected_lga = st.session_state.get('sel_lga', None)
         
-        # Add tabs for different selection methods
-        select_tab1, select_tab2 = st.tabs(["Dropdown Selection", "Interactive Map"])
+        # Dropdown selection
+        all_lgas = sorted(lga_gdf['LGA'].tolist())
+        states = sorted(lga_gdf['State'].unique())
+        state_filter = st.selectbox("Filter by State:", ["All States"] + list(states))
         
-        with select_tab1:
-            # Direct LGA selection using dropdown
-            all_lgas = sorted(lga_gdf['LGA'].tolist())
+        # Filter LGAs by state
+        if state_filter != "All States":
+            filtered_lgas = sorted(lga_gdf[lga_gdf['State'] == state_filter]['LGA'].tolist())
+        else:
+            filtered_lgas = all_lgas
             
-            # Group by state for better organization
-            states = sorted(lga_gdf['State'].unique())
-            state_filter = st.selectbox("Filter by State:", ["All States"] + list(states))
-            
-            # Filter LGAs by selected state
-            if state_filter != "All States":
-                filtered_lgas = sorted(lga_gdf[lga_gdf['State'] == state_filter]['LGA'].tolist())
-            else:
-                filtered_lgas = all_lgas
-                
-            selected = st.selectbox(
-                "Select Local Government Area (LGA):", 
-                filtered_lgas,
-                index=filtered_lgas.index(selected_lga) if selected_lga in filtered_lgas else 0
-            )
-            
-            if st.button("Select LGA", use_container_width=True):
-                sel = lga_gdf[lga_gdf['LGA'] == selected].iloc[0]
-                
-                # Clear any existing forecast or historical data when changing LGA
-                for key in ['forecast_data', 'historical_data']:
-                    if key in st.session_state:
-                        del st.session_state[key]
-                
-                # Set the new LGA
-                st.session_state['sel_lga'] = sel['LGA']
-                st.session_state['sel_state'] = sel['State']
-                st.session_state['lat'] = sel['lat'] 
-                st.session_state['lon'] = sel['lon']
-                
-                st.rerun()
+        selected = st.selectbox(
+            "Select Local Government Area (LGA):", 
+            filtered_lgas,
+            index=filtered_lgas.index(selected_lga) if selected_lga in filtered_lgas else 0
+        )
         
-        with select_tab2:
-            # Interactive map selection
-            st.write("Click to view LGAs in Nigeria:")
+        if st.button("Select LGA", use_container_width=True):
+            sel = lga_gdf[lga_gdf['LGA'] == selected].iloc[0]
             
-            try:
-                # Create an interactive map
-                m = folium.Map(location=[9.08, 8.68], zoom_start=6, tiles='CartoDB positron')
-                
-                # Add GeoJson layer with hover tooltip
-                folium.GeoJson(
-                    lga_gdf[['LGA', 'State', 'geometry']].to_dict(orient='records'),
-                    style_function=lambda f: {
-                        'fillColor': '#ADD8E6',
-                        'color': '#555555',
-                        'weight': 0.5,
-                        'fillOpacity': 0.2
-                    },
-                    tooltip=folium.GeoJsonTooltip(
-                        fields=['LGA', 'State'],
-                        aliases=['LGA:', 'State:'],
-                        style="background-color: white; color: #333333; font-family: arial; font-size: 12px; padding: 10px;"
-                    ),
-                    highlight_function=lambda x: {'weight': 3, 'fillOpacity': 0.5, 'color': '#0078D7'}
-                ).add_to(m)
-                
-                # Display the map in Streamlit
-                map_data = st_folium(m, width=None, height=400, returned_objects=['last_clicked'])
-                
-                # LGA selection by map click has been disabled.
-                pass
-            except Exception as e:
-                st.error(f"Error displaying interactive map: {e}")
-                st.info("Please use the dropdown selection method instead.")
+            # Clear existing data
+            for key in ['forecast_data', 'historical_data']:
+                if key in st.session_state:
+                    del st.session_state[key]
+            
+            # Set new LGA
+            st.session_state['sel_lga'] = sel['LGA']
+            st.session_state['sel_state'] = sel['State']
+            st.session_state['lat'] = sel['lat'] 
+            st.session_state['lon'] = sel['lon']
+            
+            st.rerun()
         
-        # Show currently selected LGA - displayed below both tabs
+        # Show selected LGA
         if 'sel_lga' in st.session_state:
             st.success(f"Selected: {st.session_state['sel_lga']}, {st.session_state['sel_state']}")
-            
-            # Simple map visualization using static image
             st.markdown(f"""
             <div style='text-align: center; background-color: #f0f2f6; color: #000; padding: 10px; border-radius: 5px; margin-top: 10px;'>
                 <p style='margin-bottom: 5px;'><strong>Geographic Location</strong></p>
                 <p>Latitude: {st.session_state['lat']:.4f}° | Longitude: {st.session_state['lon']:.4f}°</p>
             </div>
             """, unsafe_allow_html=True)
-            
-            # Show a table of nearby LGAs for context
-            try:
-                current_lga = st.session_state['sel_lga']
-                current_point = Point(st.session_state['lon'], st.session_state['lat'])
-                
-                # Calculate distances to all other LGAs
-                lga_gdf['distance'] = lga_gdf.apply(
-                    lambda row: current_point.distance(Point(row['lon'], row['lat'])),
-                    axis=1
-                )
-                
-                # Get 5 nearest LGAs (excluding the selected one)
-                nearby = lga_gdf[lga_gdf['LGA'] != current_lga].nsmallest(5, 'distance')
-                
-                if not nearby.empty:
-                    st.markdown("#### Nearby LGAs:")
-                    st.dataframe(
-                        nearby[['LGA', 'State']],
-                        hide_index=True,
-                        use_container_width=True
-                    )
-            except Exception:
-                pass
     
     # Results column
     with results_col:
@@ -359,7 +280,7 @@ else:  # Forecast or Historical mode
                 lon = st.session_state['lon']
                 baseline = baseline_map.get(lga)
 
-                # Fetch forecast data if not in session state
+                # Fetch forecast data
                 if 'forecast_data' not in st.session_state:
                     try:
                         with st.spinner("Fetching forecast data..."):
@@ -387,7 +308,7 @@ else:  # Forecast or Historical mode
                 if df is None:
                     st.stop()
 
-                # Create date range for date_input
+                # Date picker
                 available_dates = pd.to_datetime(df['date']).dt.date.unique()
                 available_dates = sorted(available_dates)
 
@@ -521,7 +442,7 @@ else:  # Forecast or Historical mode
                         st.error(f"Error processing historical data: {e}")
                         st.session_state['historical_data'] = None
     
-    # Time Series chart (spans both columns)
+    # Time Series chart
     if mode == "Forecast" and 'sel_lga' in st.session_state:
         st.subheader("📈 7-Day Forecast Time Series")
         
@@ -530,7 +451,7 @@ else:  # Forecast or Historical mode
         lon = st.session_state['lon']
         baseline = baseline_map.get(lga)
         
-        # Get forecast data if not already in session state
+        # Fetch forecast data
         if 'forecast_data' not in st.session_state:
             try:
                 with st.spinner("Fetching forecast data for time series..."):
@@ -556,7 +477,7 @@ else:  # Forecast or Historical mode
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # Show risk level explanation with better visualization
+                # Show risk level explanation
                 st.markdown("""
                 <div style="background-color: #f0f2f6; color: #000; padding: 15px; border-radius: 5px; margin-top: 10px;">
                     <h4 style="margin-top: 0; color: #000;">Risk Level Indicators:</h4>
@@ -577,7 +498,7 @@ else:  # Forecast or Historical mode
             else:
                 st.warning("No forecast data available to display.")
             
-    # Information about the forecast
+    # Forecast methodology
     if 'sel_lga' in st.session_state:
         with st.expander("About the Forecast Methodology"):
             st.markdown("""

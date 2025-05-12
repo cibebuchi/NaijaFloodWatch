@@ -1,14 +1,9 @@
 # utils.py
 import pandas as pd
 import streamlit as st
-import folium
 import json
-from shapely.geometry import shape, Point
-from folium.plugins import MarkerCluster
+from shapely.geometry import shape
 import plotly.graph_objects as go
-from streamlit_folium import st_folium
-import datetime
-import os
 
 @st.cache_data
 def load_lga_gdf(path):
@@ -53,7 +48,7 @@ def load_baseline(path):
         return {}
 
 def create_choropleth_map(gdf, data_column, title):
-    """Placeholder for choropleth map (not used in current app)"""
+    """Placeholder for choropleth map (not used)"""
     return None
 
 def generate_time_series_chart(forecast_data, lga, baseline):

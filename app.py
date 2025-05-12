@@ -53,7 +53,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Default asset paths
-default_shapefile = 'attached_assets/gadm41_NGA_2.json'
+default_shapefile = 'attached_assets/gadm41_NGA_2.geojson'
 default_baseline_csv = 'attached_assets/baseline_20220914.csv'
 
 # Sidebar configuration

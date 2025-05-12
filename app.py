@@ -184,9 +184,9 @@ if mode in ["Forecast", "Historical"]:
 
         # Forecast Mode
         if mode == "Forecast":
+            # Fetch forecast data only once per LGA selection
             with st.spinner("Fetching forecast data..."):
                 try:
-                    # Fetch forecast data
                     forecast_df = fetch_open_meteo_forecast(lat, lon)
                     if forecast_df is None or forecast_df.empty:
                         st.error("No forecast data available for the selected location.")
@@ -214,36 +214,29 @@ if mode in ["Forecast", "Historical"]:
 
                     # Ensure dates are unique and sorted
                     available_dates = sorted(list(set(available_dates)))
-                    
-                    # Debugging output (remove after testing)
-                    st.write("Available forecast dates:", available_dates)
-
-                    # Configure date input for 7-day forecast
-                    forecast_date = st.date_input(
-                        "Select Forecast Date",
-                        value=available_dates[0],
-                        min_value=available_dates[0],
-                        max_value=available_dates[-1],
-                        help="Select a date within the 7-day forecast period."
-                    )
-
-                    # Filter data for the selected date
-                    selected_day_df = forecast_df[forecast_df['date'].dt.date == forecast_date]
-                    if selected_day_df.empty:
-                        st.warning(f"No forecast data available for {forecast_date}.")
-                        forecast_df = None
 
                 except HTTPError as e:
                     st.error(f"Failed to fetch forecast data: {e}")
-                    forecast_df = None
                     st.stop()
                 except Exception as e:
                     st.error(f"Unexpected error in forecast mode: {e}")
-                    forecast_df = None
                     st.stop()
 
-            # Process and display forecast data
-            if forecast_df is not None and not forecast_df.empty and not selected_day_df.empty:
+            # Configure date input (runs on every date change)
+            forecast_date = st.date_input(
+                "Select Forecast Date",
+                value=available_dates[0],
+                min_value=available_dates[0],
+                max_value=available_dates[-1],
+                help="Select a date within the 7-day forecast period."
+            )
+
+            # Process data for the selected date
+            selected_day_df = forecast_df[forecast_df['date'].dt.date == forecast_date]
+            if selected_day_df.empty:
+                st.warning(f"No forecast data available for {forecast_date}.")
+            else:
+                # Process and display forecast data
                 baseline_val = baseline_map.get(selected_lga, None)
                 current_val = selected_day_df.iloc[0]['discharge_max']
                 ratio = current_val / baseline_val if baseline_val else None

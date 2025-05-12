@@ -1,3 +1,4 @@
+# utils.py
 import pandas as pd
 import streamlit as st
 import folium
@@ -43,6 +44,7 @@ def load_lga_gdf(path):
 
 @st.cache_data
 def load_baseline(path):
+    """Load baseline discharge values from CSV"""
     try:
         df = pd.read_csv(path)
         return df.set_index('LGA')['baseline'].to_dict()
@@ -50,5 +52,52 @@ def load_baseline(path):
         st.error(f"Error loading baseline data: {e}")
         return {}
 
-# (The rest of the code remains unchanged: create_choropleth_map, generate_time_series_chart, determine_risk_level)
-# Only load_lga_gdf is rewritten to avoid GeoPandas/Fiona entirely
+def create_choropleth_map(gdf, data_column, title):
+    """Placeholder for choropleth map (not used in current app)"""
+    return None
+
+def generate_time_series_chart(forecast_data, lga, baseline):
+    """Generate a Plotly time series chart for forecast data"""
+    try:
+        if forecast_data is None or forecast_data.empty:
+            return None
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=forecast_data['date'],
+            y=forecast_data['discharge_max'],
+            mode='lines+markers',
+            name='Forecast Discharge'
+        ))
+        if baseline:
+            fig.add_trace(go.Scatter(
+                x=forecast_data['date'],
+                y=[baseline] * len(forecast_data),
+                mode='lines',
+                name='Baseline',
+                line=dict(dash='dash')
+            ))
+        fig.update_layout(
+            title=f"7-Day Forecast for {lga}",
+            xaxis_title='Date',
+            yaxis_title='Discharge (m³/s)',
+            hovermode='x unified'
+        )
+        return fig
+    except Exception as e:
+        st.error(f"Error generating time series chart: {e}")
+        return None
+
+def determine_risk_level(ratio):
+    """Determine flood risk level based on discharge ratio"""
+    try:
+        if ratio is None:
+            return "N/A", "#f7f7f7"
+        if ratio <= 0.8:
+            return "Low", "#4CAF50"
+        elif ratio <= 1.2:
+            return "Medium", "#FFC107"
+        else:
+            return "High", "#F44336"
+    except Exception as e:
+        st.error(f"Error determining risk level: {e}")
+        return "N/A", "#f7f7f7"

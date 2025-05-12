@@ -7,8 +7,15 @@ import folium
 from streamlit_folium import st_folium
 from requests import HTTPError
 from shapely.geometry import Point
+
+# Try importing utils
+try:
+    from utils import load_lga_gdf, load_baseline, create_choropleth_map, generate_time_series_chart, determine_risk_level
+except ImportError as e:
+    st.error(f"Failed to import utils module: {e}. Please ensure utils.py is in the same directory and contains the required functions.")
+    st.stop()
+
 from fetch_open_meteo import fetch_open_meteo_forecast, fetch_open_meteo_historical
-from utils import load_lga_gdf, load_baseline, create_choropleth_map, generate_time_series_chart, determine_risk_level
 from static_map import create_static_map
 
 # Page configuration
@@ -74,8 +81,8 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Default shapefile path (update if needed)
-default_shapefile = 'attached_assets/gadm41_NGA_2.shp'
+# Default shapefile path (update to GeoJSON)
+default_shapefile = 'attached_assets/gadm41_NGA_2.json'
 
 # Sidebar configuration
 with st.sidebar:
@@ -106,10 +113,10 @@ with st.sidebar:
 try:
     lga_gdf = load_lga_gdf(shapefile_path)
     if lga_gdf is None:
-        st.error("Failed to load shapefile data.")
+        st.error("Failed to load GeoJSON data.")
         st.stop()
 except Exception as e:
-    st.error(f"Error loading shapefile: {e}")
+    st.error(f"Error loading GeoJSON: {e}")
     st.stop()
 
 # Load baseline
@@ -278,7 +285,7 @@ else:  # Forecast or Historical mode
                 
                 # Add GeoJson layer with hover tooltip
                 folium.GeoJson(
-                    lga_gdf[['LGA', 'State', 'geometry']].to_json(),
+                    lga_gdf[['LGA', 'State', 'geometry']].to_dict(orient='records'),
                     style_function=lambda f: {
                         'fillColor': '#ADD8E6',
                         'color': '#555555',
@@ -352,7 +359,7 @@ else:  # Forecast or Historical mode
                 lon = st.session_state['lon']
                 baseline = baseline_map.get(lga)
 
-                # Fetch forecast data if not already in session state
+                # Fetch forecast data if not in session state
                 if 'forecast_data' not in st.session_state:
                     try:
                         with st.spinner("Fetching forecast data..."):
@@ -362,9 +369,10 @@ else:  # Forecast or Historical mode
                                 st.session_state['forecast_data'] = None
                                 st.stop()
                             if 'date' not in df.columns or 'discharge_max' not in df.columns:
-                                st.error("Forecast data missing required columns.")
+                                st.error("Forecast data missing required columns: 'date' or 'discharge_max'.")
                                 st.session_state['forecast_data'] = None
                                 st.stop()
+                            df['date'] = df['date'].astype(str)
                             st.session_state['forecast_data'] = df
                     except HTTPError as e:
                         st.error(f"API error: {e}")
@@ -400,11 +408,7 @@ else:  # Forecast or Historical mode
                         else:
                             discharge = float(row['discharge_max'].iloc[0]) if 'discharge_max' in row.columns and not pd.isna(row['discharge_max'].iloc[0]) else None
                             ratio = discharge / baseline if baseline and discharge else None
-                            try:
-                                risk_level, risk_color = determine_risk_level(ratio)
-                            except Exception as e:
-                                st.warning(f"Error determining risk level: {e}")
-                                risk_level, risk_color = "N/A", "#f7f7f7"
+                            risk_level, risk_color = determine_risk_level(ratio)
 
                             # Display metrics
                             st.markdown(f"### Forecast for {date.strftime('%B %d, %Y')}")
@@ -471,17 +475,14 @@ else:  # Forecast or Historical mode
                                 st.session_state['historical_data'] = None
                             else:
                                 if 'date' not in dfh.columns or 'discharge_max' not in dfh.columns:
-                                    st.error("Historical data missing required columns.")
+                                    st.error("Historical data missing required columns: 'date' or 'discharge_max'.")
                                     st.session_state['historical_data'] = None
                                     st.stop()
+                                dfh['date'] = dfh['date'].astype(str)
                                 st.session_state['historical_data'] = dfh
                                 discharge = float(dfh['discharge_max'].iloc[0]) if 'discharge_max' in dfh.columns and not pd.isna(dfh['discharge_max'].iloc[0]) else None
                                 ratio = discharge / baseline if baseline and discharge else None
-                                try:
-                                    risk_level, risk_color = determine_risk_level(ratio)
-                                except Exception as e:
-                                    st.warning(f"Error determining risk level: {e}")
-                                    risk_level, risk_color = "N/A", "#f7f7f7"
+                                risk_level, risk_color = determine_risk_level(ratio)
                                 
                                 # Display metrics
                                 st.markdown(f"### Historical Data for {date.strftime('%B %d, %Y')}")
@@ -539,10 +540,10 @@ else:  # Forecast or Historical mode
                         forecast_data = None
                     else:
                         if 'date' not in forecast_data.columns or 'discharge_max' not in forecast_data.columns:
-                            st.error("Forecast data missing required columns.")
+                            st.error("Forecast data missing required columns: 'date' or 'discharge_max'.")
                             forecast_data = None
                         else:
-                            forecast_data['date'] = forecast_data['date'].astype(str)  # Ensure string format
+                            forecast_data['date'] = forecast_data['date'].astype(str)
                     st.session_state['forecast_data'] = forecast_data
             except Exception as e:
                 st.error(f"Error fetching forecast data: {e}")
@@ -557,7 +558,7 @@ else:  # Forecast or Historical mode
                 
                 # Show risk level explanation with better visualization
                 st.markdown("""
-                <div style="background-color: #f0f2f6; color: #000; color: #000; padding: 15px; border-radius: 5px; margin-top: 10px;">
+                <div style="background-color: #f0f2f6; color: #000; padding: 15px; border-radius: 5px; margin-top: 10px;">
                     <h4 style="margin-top: 0; color: #000;">Risk Level Indicators:</h4>
                     <div style="display: flex; align-items: center; margin-bottom: 8px;">
                         <div style="width: 15px; height: 15px; background-color: #4CAF50; margin-right: 10px; border-radius: 2px;"></div>

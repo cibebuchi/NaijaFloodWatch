@@ -1,4 +1,3 @@
-import os
 import datetime
 import streamlit as st
 import pandas as pd
@@ -52,53 +51,49 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Default asset paths
-default_shapefile = 'attached_assets/gadm41_NGA_2.geojson'
-default_baseline_csv = 'attached_assets/baseline_20220914.csv'
+# Asset paths
+SHAPEFILE = 'attached_assets/gadm41_NGA_2.geojson'
+BASELINE_CSV = 'attached_assets/baseline_20220914.csv'
+LOGO_PATH = 'attached_assets/logo.jpg'
 
-# Sidebar configuration
+# Sidebar
 with st.sidebar:
-    # Display logo.jpg (preferred)
     try:
-        st.image('attached_assets/logo.jpg', width=150)
-    except Exception:
+        st.image(LOGO_PATH, width=150)
+    except:
         pass
-
     st.subheader("Dashboard Mode")
-    mode = st.radio("Select View", ["About", "Forecast", "Historical"], index=1)
+    mode = st.radio("Select view", ["About", "Forecast", "Historical"], index=1)
     with st.expander("Help & Information"):
         st.markdown(
             """
-1. Select Forecast or Historical mode.
-2. Choose a State and LGA.
-3. In Forecast: pick a future date; in Historical: pick a past date.
-4. View metrics and risk level for the selected day.
+1. Choose mode (Forecast/Historical).
+2. Select State and LGA.
+3. Forecast: pick a date; Historical: pick a past date.
+4. Metrics update automatically on selection change.
 """
         )
 
-# Load GeoJSON for LGAs
+# Load data
 try:
-    lga_gdf = load_lga_gdf(default_shapefile)
-    if lga_gdf is None or lga_gdf.empty:
-        raise FileNotFoundError(f"GeoJSON not found or empty at {default_shapefile}")
+    lga_gdf = load_lga_gdf(SHAPEFILE)
+    if lga_gdf.empty:
+        raise FileNotFoundError
 except Exception as e:
     st.error(f"Error loading GeoJSON: {e}")
     st.stop()
 
-# Load baseline discharge map
 try:
-    baseline_map = load_baseline(default_baseline_csv)
-    if not baseline_map:
-        st.warning("No baseline data found. Risk levels may be incomplete.")
+    baseline_map = load_baseline(BASELINE_CSV)
 except Exception as e:
     st.error(f"Error loading baseline CSV: {e}")
     st.stop()
 
-# Date settings
+# Today and forecast horizon
 today = datetime.date.today()
 FORECAST_DAYS = 7
 
-# About section
+# About page
 if mode == "About":
     st.markdown(
         """
@@ -113,99 +108,102 @@ This dashboard provides flood risk monitoring and forecasting for Local Governme
 - LGA Selection: Select any Local Government Area for detailed information
 
 **Data Sources:**
-The system uses hydrological data from the Copernicus Global Flood Awareness System (GloFAS) provided through the Open-Meteo API. Baseline values represent the river discharge during the significant flooding event of September 14, 2022.
+Hydrological data from the Copernicus GloFAS API via Open-Meteo. Baseline values: discharge on 14 Sep 2022.
 
-**Using The Dashboard:**
-1. Select a state and LGA from the dropdown menus
-2. View forecast or historical data based on your selected mode
-3. Analyze the river discharge values and risk levels
-4. Explore the 7-day forecast in the time series chart
+**Usage:**
+1. Select state & LGA.
+2. Switch to Forecast or Historical.
+3. Pick date; metrics update automatically.
+4. Explore time series chart for forecasts.
 
 **Disclaimer:**
-This engine may be more effective for LGAs that were affected by the September 2022 flood event, as these areas have established baseline values for more accurate risk assessment. Also the forecast value does not automatically update when date or LGA is changed.
+Most accurate for LGAs affected by Sep 2022 flood; changing selection updates metrics but does not auto-fetch mid-chart.
 """
     )
     st.stop()
 
-# Clear cache when mode changes
-if st.session_state.get('last_mode') != mode:
-    for k in ['forecast_data', 'historical_data', 'hist_date_fetched', 'sel_lga', 'sel_state', 'lat', 'lon']:
-        st.session_state.pop(k, None)
-st.session_state['last_mode'] = mode
+# Reset session on mode change to clear caches
+if st.session_state.get('mode') != mode:
+    for key in ['sel_lga', 'sel_state', 'lat', 'lon', 'forecast_data', 'historical_data']:
+        st.session_state.pop(key, None)
+    st.session_state['mode'] = mode
 
-# Layout columns
-col1, col2 = st.columns(2)
-with col1:
-    st.subheader("📍 Nigeria LGA Selection")
+# Layout
+col_select, col_display = st.columns([1, 2])
+with col_select:
+    st.subheader("📍 LGA Selection")
     states = sorted(lga_gdf['State'].unique())
-    chosen_state = st.selectbox("Filter by State:", ["All States"] + states)
-    lgas = sorted(lga_gdf[lga_gdf['State']==chosen_state]['LGA']) if chosen_state!="All States" else sorted(lga_gdf['LGA'])
-    chosen_lga = st.selectbox("Select Local Government Area:", [""] + lgas)
-    if chosen_lga:
-        sel = lga_gdf[lga_gdf['LGA']==chosen_lga].iloc[0]
-        # Update selected LGA and clear previous data caches
-        st.session_state['sel_lga'] = sel['LGA']
+    state = st.selectbox("State:", ["All"] + states)
+    if state != "All":
+        options = sorted(lga_gdf[lga_gdf['State']==state]['LGA'])
+    else:
+        options = sorted(lga_gdf['LGA'])
+    lga = st.selectbox("LGA:", options)
+    if lga:
+        sel = lga_gdf[lga_gdf['LGA']==lga].iloc[0]
+        changed = (st.session_state.get('sel_lga') != lga)
+        st.session_state['sel_lga'] = lga
         st.session_state['sel_state'] = sel['State']
         st.session_state['lat'] = sel['lat']
         st.session_state['lon'] = sel['lon']
-        for cache_key in ['forecast_data', 'historical_data', 'hist_date_fetched']:
-            st.session_state.pop(cache_key, None)
-        st.rerun()
-    if st.session_state.get('sel_lga'):
-        st.success(f"Selected: {st.session_state['sel_lga']}, {st.session_state['sel_state']}")
-        st.markdown(f"**Lat:** {st.session_state['lat']:.4f}°, **Lon:** {st.session_state['lon']:.4f}°")
+        if changed:
+            st.session_state.pop('forecast_data', None)
+            st.session_state.pop('historical_data', None)
+            st.rerun()
 
-with col2:
-    if mode == "Forecast":
-        st.subheader("🌧️ Flood Forecast")
-        if not st.session_state.get('sel_lga'):
-            st.info("Please select a state and LGA.")
-        else:
-            df = st.session_state.get('forecast_data')
-            if df is None:
+with col_display:
+    if not st.session_state.get('sel_lga'):
+        st.info("Please select an LGA.")
+    else:
+        lat = st.session_state['lat']
+        lon = st.session_state['lon']
+        lga_name = st.session_state['sel_lga']
+        baseline = baseline_map.get(lga_name)
+
+        if mode == "Forecast":
+            st.subheader("🌧️ Forecast")
+            if 'forecast_data' not in st.session_state:
                 with st.spinner("Fetching forecast data..."):
-                    df = fetch_open_meteo_forecast(st.session_state['lat'], st.session_state['lon'], FORECAST_DAYS)
-                st.session_state['forecast_data'] = df
-            if df is not None and not df.empty:
+                    st.session_state['forecast_data'] = fetch_open_meteo_forecast(lat, lon, FORECAST_DAYS)
+            df = st.session_state['forecast_data']
+            if df is not None:
                 df['date'] = pd.to_datetime(df['date']).dt.date
-                date = st.date_input("Select forecast date", min_value=df['date'].min(), max_value=df['date'].max(), value=df['date'].min())
+                date = st.date_input("Date:", min_value=df['date'].min(), max_value=df['date'].max(), value=df['date'].min())
                 row = df[df['date']==date].iloc[0]
                 discharge = row['discharge_max']
-                baseline = baseline_map.get(st.session_state['sel_lga'])
-                ratio = discharge / baseline if baseline else None
+                ratio = discharge/baseline if baseline else None
                 level, color = determine_risk_level(ratio)
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Forecast (m³/s)", f"{discharge:.2f}")
-                c2.metric("Baseline (m³/s)", f"{baseline:.2f}" if baseline else "-")
-                c3.metric("Ratio", f"{ratio:.2f}" if ratio else "-")
-                c4.markdown(f"<div style='background-color:{color};padding:10px;border-radius:5px;text-align:center;'><strong>Risk: {level}</strong></div>", unsafe_allow_html=True)
-                fig = generate_time_series_chart(df, st.session_state['sel_lga'], baseline)
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("Forecast (m³/s)", f"{discharge:.2f}")
+                m2.metric("Baseline (m³/s)", f"{baseline:.2f}" if baseline else "-")
+                m3.metric("Ratio", f"{ratio:.2f}" if ratio else "-")
+                m4.markdown(f"<div style='background-color:{color};padding:8px;border-radius:4px;text-align:center;'><strong>Risk: {level}</strong></div>", unsafe_allow_html=True)
+                fig = generate_time_series_chart(df, lga_name, baseline)
                 st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.subheader("📜 Historical Data")
-        if not st.session_state.get('sel_lga'):
-            st.info("Please select a state and LGA.")
+
         else:
-            date = st.date_input("Select historical date", min_value=datetime.date(2022,9,14), max_value=today, value=today)
-            fetched = st.session_state.get('hist_date_fetched')
-            if fetched != date:
+            st.subheader("📜 Historical")
+            date = st.date_input("Date:", min_value=datetime.date(2022,9,14), max_value=today, value=today)
+            if ('historical_data' not in st.session_state) or (st.session_state['historical_data_date'] != date):
                 with st.spinner("Fetching historical data..."):
-                    hist_df = fetch_open_meteo_historical(st.session_state['lat'], st.session_state['lon'], date.strftime("%Y-%m-%d"))
+                    hist_df = fetch_open_meteo_historical(lat, lon, date.strftime("%Y-%m-%d"))
                 st.session_state['historical_data'] = hist_df
-                st.session_state['hist_date_fetched'] = date
-            hist_df = st.session_state.get('historical_data')
-            if hist_df is not None and not hist_df.empty:
+                st.session_state['historical_data_date'] = date
+            hist_df = st.session_state['historical_data']
+            if hist_df is not None:
                 discharge = hist_df.iloc[0]['discharge_max']
-                baseline = baseline_map.get(st.session_state['sel_lga'])
-                ratio = discharge / baseline if baseline else None
+                ratio = discharge/baseline if baseline else None
                 level, color = determine_risk_level(ratio)
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("Observed (m³/s)", f"{discharge:.2f}")
                 c2.metric("Baseline (m³/s)", f"{baseline:.2f}" if baseline else "-")
                 c3.metric("Ratio", f"{ratio:.2f}" if ratio else "-")
-                c4.markdown(f"<div style='background-color:{color};padding:10px;border-radius:5px;text-align:center;'><strong>Risk: {level}</strong></div>", unsafe_allow_html=True)
+                c4.markdown(f"<div style='background-color:{color};padding:8px;border-radius:4px;text-align:center;'><strong>Risk: {level}</strong></div>", unsafe_allow_html=True)
 
 # Footer
 st.markdown("<hr><p style='text-align:center;'>Maintained and Created by Chibuike Ibebuchi and Itohan-Osa Abu</p>", unsafe_allow_html=True)
 
-
+# To commit this change:
+# git add app.py
+# git commit -m "Fix forecast auto-update on LGA/date change"
+# git push origin main

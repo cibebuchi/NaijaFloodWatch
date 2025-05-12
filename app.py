@@ -121,13 +121,7 @@ except Exception as e:
     st.error(f"Error loading baseline CSV: {e}")
     st.stop()
 
-# Footer placed at the bottom
-st.markdown("""
-<p style='font-size: 12px; color: gray; text-align: center;'>
-Nigeria Flood Early-Warning Dashboard | Data from Open-Meteo API | Updated: 2025-05-11 23:59 UTC<br>
-Maintained and Created by Chibuike Ibebuchi and Itohan-Osa Abu.
-</p>
-""", unsafe_allow_html=True)
+
 
 # Show About Page
 if mode == "About":
@@ -161,6 +155,14 @@ if mode == "About":
     """)
 
 # Forecast and Historical Mode Logic
+
+# Footer will be rendered at the very end of the app
+footer_html = """
+<p style='font-size: 12px; color: gray; text-align: center;'>
+Nigeria Flood Early-Warning Dashboard | Data from Open-Meteo API | Updated: 2025-05-11 23:59 UTC<br>
+Maintained and Created by Chibuike Ibebuchi and Itohan-Osa Abu.
+</p>
+"""
 st.markdown("---")
 if mode in ["Forecast", "Historical"]:
     state_options = sorted(lga_gdf['State'].unique())
@@ -260,3 +262,6 @@ Maintained and Created by Chibuike Ibebuchi and Itohan-Osa Abu.
                         st.info("No data available for this date.")
                 except Exception as e:
                     st.error(f"Error fetching historical data: {e}")
+
+# Display footer at the very end
+st.markdown(footer_html, unsafe_allow_html=True)

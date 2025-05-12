@@ -184,7 +184,10 @@ if mode in ["Forecast", "Historical"]:
 
         # Forecast Mode
         if mode == "Forecast":
-            # Fetch forecast data only if not already in session state
+            # Define baseline_val at the top
+            baseline_val = baseline_map.get(selected_lga, None)
+
+            # Fetch forecast data only if not already in session state or new LGA selected
             if 'forecast_data' not in st.session_state or confirm_lga:
                 with st.spinner("Fetching forecast data..."):
                     try:
@@ -245,7 +248,6 @@ if mode in ["Forecast", "Historical"]:
                 if selected_day_df.empty:
                     st.warning(f"No forecast data available for {forecast_date}.")
                 else:
-                    baseline_val = baseline_map.get(selected_lga, None)
                     current_val = selected_day_df.iloc[0]['discharge_max']
                     ratio = current_val / baseline_val if baseline_val else None
 

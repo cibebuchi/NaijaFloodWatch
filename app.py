@@ -78,7 +78,7 @@ default_shapefile = 'attached_assets/gadm41_NGA_2.geojson'
 
 # Sidebar configuration
 with st.sidebar:
-    st.image('logo.jpeg', width=150)
+    st.image('logo.jpg', width=150)
 
     shapefile_path = default_shapefile
     baseline_csv = 'attached_assets/baseline_20220914.csv'

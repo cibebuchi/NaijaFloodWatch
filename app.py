@@ -117,9 +117,6 @@ Nigeria Flood Early-Warning Dashboard | Data from Open-Meteo API | Updated: 2025
 Maintained and Created by Chibuike Ibebuchi and Itohan-Osa Abu.
 </p>
 """, unsafe_allow_html=True)
-except Exception as e:
-    st.error(f"Error loading shapefile: {e}")
-    st.stop()
 
 # Load baseline
 try:

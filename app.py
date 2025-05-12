@@ -1,528 +1,262 @@
-import os
 import datetime
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from requests import HTTPError
 
-# Try importing utils
+# Import utilities
 try:
-    from utils import load_lga_gdf, load_baseline, create_choropleth_map, generate_time_series_chart, determine_risk_level
+    from utils import (
+        load_lga_gdf,
+        load_baseline,
+        create_choropleth_map,
+        generate_time_series_chart,
+        determine_risk_level,
+    )
 except ImportError as e:
-    st.error(f"Failed to import utils module: {e}. Please ensure utils.py is in the same directory and contains the required functions.")
+    st.error(f"Failed to import utils module: {e}. Ensure utils.py is present and functions are defined.")
     st.stop()
 
-from fetch_open_meteo import fetch_open_meteo_forecast, fetch_open_meteo_historical
+# Import fetch functions
+try:
+    from fetch_open_meteo import (
+        fetch_open_meteo_forecast,
+        fetch_open_meteo_historical,
+    )
+except ImportError as e:
+    st.error(f"Failed to import fetch_open_meteo module: {e}. Ensure fetch_open_meteo.py is present and functions are defined.")
+    st.stop()
 
-# Page configuration
-st.set_page_config(
-    page_title="Nigeria Flood Dashboard",
-    page_icon="🌊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# App configuration
+st.set_page_config(page_title="NaijaFloodWatch", layout="wide")
 
-# Custom CSS for styling
+# CSS styling
 st.markdown("""
 <style>
-    .metric-container {
-        background-color: #f7f7f7;
-        border-radius: 5px;
-        padding: 15px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        text-align: center;
-    }
-    .metric-value {
-        font-size: 28px;
-        font-weight: bold;
-    }
-    .metric-label {
-        font-size: 14px;
-        color: #666;
-    }
-    .risk-high {
-        background-color: #ffebee;
-        color: #d32f2f;
-    }
-    .risk-medium {
-        background-color: #fff8e1;
-        color: #ff8f00;
-    }
-    .risk-low {
-        background-color: #e8f5e9;
-        color: #2e7d32;
-    }
-    .stApp header {
-        background-color: rgba(0, 120, 215, 0.1);
-    }
-    .header-container {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-    .app-header {
-        color: #0078D7;
-        margin-bottom: 20px;
-    }
+    .metric-container { background-color: #f7f7f7; border-radius: 5px; padding: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); text-align: center; }
+    .metric-value { font-size: 28px; font-weight: bold; }
+    .metric-label { font-size: 14px; color: #666; }
+    .risk-high { background-color: #ffebee; color: #d32f2f; }
+    .risk-medium { background-color: #fff8e1; color: #ff8f00; }
+    .risk-low { background-color: #e8f5e9; color: #2e7d32; }
+    .header-container { display: flex; align-items: center; justify-content: space-between; }
+    .app-header { color: #0078D7; margin-bottom: 20px; }
+    .stApp header { background-color: rgba(0, 120, 215, 0.1); }
 </style>
 """, unsafe_allow_html=True)
 
-# App title and header
-st.markdown(
-    """
-    <div class="header-container">
-        <h1 class="app-header">NaijaFloodWatch</h1>
-    </div>
-    """, 
-    unsafe_allow_html=True
-)
+# App title
+st.markdown("""
+<div class="header-container">
+    <h1 class="app-header">NaijaFloodWatch</h1>
+</div>
+""", unsafe_allow_html=True)
 
-# Default GeoJSON path
+# Default asset paths
 default_shapefile = 'attached_assets/gadm41_NGA_2.json'
+default_baseline_csv = 'attached_assets/baseline_20220914.csv'
 
 # Sidebar configuration
 with st.sidebar:
     st.image('logo.jpeg', width=150)
-    
-    # Hidden configuration
     shapefile_path = default_shapefile
-    baseline_csv = 'attached_assets/baseline_20220914.csv'
-    
+    baseline_csv = default_baseline_csv
+
     st.subheader("Dashboard Mode")
     mode = st.radio("Select View", ["About", "Forecast", "Historical"], index=1)
-    
-    # Help information
     with st.expander("Help & Information"):
-        st.markdown("""
-        **How to use this dashboard:**
-        1. Select a mode (Forecast or Historical)
-        2. Choose a state and LGA from the dropdown menus
-        3. View the results and time series data
-        
-        **About the data:**
-        - Forecast data shows river discharge predictions
-        - Risk levels are based on comparison to Sept 14, 2022 baseline
-        - Data source: Copernicus GloFAS via Open-Meteo API
-        """)
+        st.markdown(
+            """
+1. Select Forecast or Historical mode.
+2. Choose a State and LGA.
+3. In Forecast: pick a future date; in Historical: pick a past date.
+4. View metrics and risk level for the selected day.
+"""
+        )
 
-# Load GeoJSON
+# Load GeoJSON for LGAs
 try:
     lga_gdf = load_lga_gdf(shapefile_path)
     if lga_gdf is None:
-        st.error("Failed to load GeoJSON data.")
-        st.stop()
+        raise ValueError("Empty GeoDataFrame")
 except Exception as e:
     st.error(f"Error loading GeoJSON: {e}")
     st.stop()
 
-# Load baseline
+# Load baseline discharge map
 try:
     baseline_map = load_baseline(baseline_csv)
     if not baseline_map:
-        st.warning("No baseline data available. Risk assessment will be limited.")
+        st.warning("No baseline data found. Risk levels may be incomplete.")
 except Exception as e:
     st.error(f"Error loading baseline CSV: {e}")
     st.stop()
 
-# Dates and config
+# Date settings
 today = datetime.date.today()
 FORECAST_DAYS = 7
 
-# About mode
+# About section
 if mode == "About":
-    st.markdown("""
-    ## Nigeria Flood Early-Warning System
-    
-    This dashboard provides flood risk monitoring and forecasting for Local Government Areas (LGAs) across Nigeria.
-    
-    ### Key Features:
-    - **Real-time Forecasts**: 7-day river discharge predictions for any LGA
-    - **Risk Assessment**: Comparison against September 2022 flood baseline
-    - **Historical Analysis**: Review river discharge data for past dates
-    - **LGA Selection**: Select any Local Government Area for detailed information
-    
-    ### Data Sources:
-    The system uses hydrological data from the Copernicus Global Flood Awareness System (GloFAS) 
-    provided through the Open-Meteo API. Baseline values represent the river discharge during 
-    the significant flooding event of September 14, 2022.
-    
-    ### Using The Dashboard:
-    1. Select a state and LGA from the dropdown menus
-    2. View forecast or historical data based on your selected mode
-    3. Analyze the river discharge values and risk levels
-    4. Explore the 7-day forecast in the time series chart
-    
-    ### Disclaimer:
-    This engine may be more effective for LGAs that were affected by the September 2022 flood event, 
-    as these areas have established baseline values for more accurate risk assessment.
-    
-    """)
-    
-    # LGA selection interface
-    st.subheader("LGA Selection Interface")
-    
-    # Group by state
+    st.markdown(
+        """
+## Nigeria Flood Early-Warning System
+
+This dashboard provides 7-day river discharge forecasts and single-day historical data for LGAs in Nigeria.
+
+- **Forecast**: future discharge forecasts from Open-Meteo's GloFAS API.
+- **Historical**: observed discharge for a specific past date.
+- **Risk assessment**: compares discharge against baseline values from 14 September 2022.
+"""
+    )
+    st.stop()
+
+# Clear cache when mode changes
+if 'last_mode' in st.session_state and st.session_state['last_mode'] != mode:
+    for key in ['forecast_data', 'historical_data', 'hist_date_fetched']:
+        st.session_state.pop(key, None)
+st.session_state['last_mode'] = mode
+
+# Layout columns
+select_col, results_col = st.columns([1, 1])
+
+with select_col:
+    st.subheader("📍 Nigeria LGA Selection")
     states = sorted(lga_gdf['State'].unique())
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        state_filter = st.selectbox("Filter by State:", ["All States"] + list(states), key="about_state_filter")
-    
-    # Filter LGAs by state
+    state_filter = st.selectbox("Filter by State:", ["All States"] + states)
+
     if state_filter != "All States":
-        filtered_lgas = sorted(lga_gdf[lga_gdf['State'] == state_filter]['LGA'].tolist())
+        filtered_lgas = sorted(lga_gdf[lga_gdf['State'] == state_filter]['LGA'])
     else:
-        filtered_lgas = sorted(lga_gdf['LGA'].tolist())
-    
-    with col2:
-        st.selectbox("Select Local Government Area (LGA):", filtered_lgas, key="about_lga_select")
-    
-    # Sample metrics display
-    st.subheader("Understanding Risk Indicators")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("""
-        <div class="metric-container risk-low">
-            <div class="metric-value">Low Risk</div>
-            <div class="metric-label">Current discharge ≤ 80% of baseline</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-    with col2:
-        st.markdown("""
-        <div class="metric-container risk-medium">
-            <div class="metric-value">Medium Risk</div>
-            <div class="metric-label">Current discharge between 80-120% of baseline</div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-    with col3:
-        st.markdown("""
-        <div class="metric-container risk-high">
-            <div class="metric-value">High Risk</div>
-            <div class="metric-label">Current discharge > 120% of baseline</div>
-        </div>
-        """, unsafe_allow_html=True)
+        filtered_lgas = sorted(lga_gdf['LGA'])
 
-else:  # Forecast or Historical mode
-    # Clear cached results if changing modes
-    if 'last_mode' in st.session_state and st.session_state['last_mode'] != mode:
-        for key in ['forecast_data', 'historical_data']:
-            if key in st.session_state:
-                del st.session_state[key]
-    
-    # Store current mode
-    st.session_state['last_mode'] = mode
-    
-    # Create two columns for layout
-    select_col, results_col = st.columns([1, 1])
-    
-    # LGA selection column
-    with select_col:
-        st.subheader("📍 Nigeria LGA Selection")
-        selected_lga = st.session_state.get('sel_lga', None)
-        
-        # Dropdown selection
-        all_lgas = sorted(lga_gdf['LGA'].tolist())
-        states = sorted(lga_gdf['State'].unique())
-        state_filter = st.selectbox("Filter by State:", ["All States"] + list(states))
-        
-        # Filter LGAs by state
-        if state_filter != "All States":
-            filtered_lgas = sorted(lga_gdf[lga_gdf['State'] == state_filter]['LGA'].tolist())
-        else:
-            filtered_lgas = all_lgas
-            
-        selected = st.selectbox(
-            "Select Local Government Area (LGA):", 
-            filtered_lgas,
-            index=filtered_lgas.index(selected_lga) if selected_lga in filtered_lgas else 0
+    selected_lga = st.selectbox("Select Local Government Area:", [""] + filtered_lgas)
+    if st.button("Select LGA"):
+        sel = lga_gdf[lga_gdf['LGA'] == selected_lga].iloc[0]
+        for key in ['sel_lga', 'sel_state', 'lat', 'lon']:
+            st.session_state[key] = sel[key] if key in sel else None
+        st.experimental_rerun()
+
+    if 'sel_lga' in st.session_state:
+        st.success(f"Selected: {st.session_state['sel_lga']}, {st.session_state['sel_state']}")
+        st.markdown(
+            f"""
+<div style='background-color: #eee; padding: 10px; border-radius: 5px; margin-top: 10px;'>
+  <strong>Geographic Location</strong><br>
+  Lat: {st.session_state['lat']:.4f}°, Lon: {st.session_state['lon']:.4f}°
+</div>
+""",
+            unsafe_allow_html=True,
         )
-        
-        if st.button("Select LGA", use_container_width=True):
-            sel = lga_gdf[lga_gdf['LGA'] == selected].iloc[0]
-            
-            # Clear existing data
-            for key in ['forecast_data', 'historical_data']:
-                if key in st.session_state:
-                    del st.session_state[key]
-            
-            # Set new LGA
-            st.session_state['sel_lga'] = sel['LGA']
-            st.session_state['sel_state'] = sel['State']
-            st.session_state['lat'] = sel['lat'] 
-            st.session_state['lon'] = sel['lon']
-            
-            st.rerun()
-        
-        # Show selected LGA
-        if 'sel_lga' in st.session_state:
-            st.success(f"Selected: {st.session_state['sel_lga']}, {st.session_state['sel_state']}")
-            st.markdown(f"""
-            <div style='text-align: center; background-color: #f0f2f6; color: #000; padding: 10px; border-radius: 5px; margin-top: 10px;'>
-                <p style='margin-bottom: 5px;'><strong>Geographic Location</strong></p>
-                <p>Latitude: {st.session_state['lat']:.4f}° | Longitude: {st.session_state['lon']:.4f}°</p>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    # Results column
-    with results_col:
-        if mode == "Forecast":
-            st.subheader("🌧️ Flood Forecast")
-            
-            if 'sel_lga' not in st.session_state:
-                st.info("Please select a state and LGA from the dropdown menus above to view forecast data.")
-            else:
-                lga = st.session_state['sel_lga']
-                state = st.session_state['sel_state']
-                lat = st.session_state['lat']
-                lon = st.session_state['lon']
-                baseline = baseline_map.get(lga)
 
-                # Fetch forecast data
-                if 'forecast_data' not in st.session_state:
-                    try:
-                        with st.spinner("Fetching forecast data..."):
-                            df = fetch_open_meteo_forecast(lat, lon, days=FORECAST_DAYS)
-                            if df is None or df.empty:
-                                st.error("No forecast data available for the selected location.")
-                                st.session_state['forecast_data'] = None
-                                st.stop()
-                            if 'date' not in df.columns or 'discharge_max' not in df.columns:
-                                st.error("Forecast data missing required columns: 'date' or 'discharge_max'.")
-                                st.session_state['forecast_data'] = None
-                                st.stop()
-                            df['date'] = df['date'].astype(str)
-                            st.session_state['forecast_data'] = df
-                    except HTTPError as e:
-                        st.error(f"API error: {e}")
-                        st.session_state['forecast_data'] = None
-                        st.stop()
-                    except Exception as e:
-                        st.error(f"Error fetching forecast data: {e}")
-                        st.session_state['forecast_data'] = None
-                        st.stop()
+with results_col:
+    if mode == "Forecast":
+        st.subheader("🌧️ Flood Forecast")
+        if 'sel_lga' not in st.session_state:
+            st.info("Please select a state and LGA to view forecast data.")
+        else:
+            lga = st.session_state['sel_lga']
+            lat = st.session_state['lat']
+            lon = st.session_state['lon']
+            baseline = baseline_map.get(lga)
 
-                df = st.session_state['forecast_data']
-                if df is None:
+            if 'forecast_data' not in st.session_state:
+                try:
+                    with st.spinner("Fetching forecast data..."):
+                        df = fetch_open_meteo_forecast(lat, lon, days=FORECAST_DAYS)
+                    if df is None or df.empty:
+                        raise ValueError("Empty forecast DataFrame")
+                    if not {'date', 'discharge_max'}.issubset(df.columns):
+                        raise KeyError("Missing 'date' or 'discharge_max' columns")
+                    df['date'] = df['date'].astype(str)
+                    st.session_state['forecast_data'] = df
+                except Exception as e:
+                    st.error(f"Error fetching forecast: {e}")
                     st.stop()
 
-                # Date picker
-                available_dates = pd.to_datetime(df['date']).dt.date.unique()
-                available_dates = sorted(available_dates)
+            df = st.session_state['forecast_data']
+            available_dates = sorted(pd.to_datetime(df['date']).dt.date.unique())
+            date = st.date_input(
+                "Select forecast date",
+                min_value=available_dates[0],
+                max_value=available_dates[-1],
+                value=available_dates[0],
+            )
+            discharge = float(df.loc[df['date'] == str(date), 'discharge_max'])
+            ratio = (discharge / baseline) if baseline else None
+            risk_level, risk_color = determine_risk_level(ratio)
 
-                with st.form("forecast_form"):
-                    date = st.date_input(
-                        "Select Forecast Date", 
-                        value=available_dates[0] if available_dates else today,
-                        min_value=available_dates[0] if available_dates else today,
-                        max_value=available_dates[-1] if available_dates else today + datetime.timedelta(days=FORECAST_DAYS-1)
-                    )
-                    btn = st.form_submit_button("Generate Forecast", use_container_width=True)
-                
-                if btn:
-                    try:
-                        row = df[df['date'] == date.strftime('%Y-%m-%d')]
-                        if row.empty:
-                            st.warning(f"No forecast data available for {date.strftime('%B %d, %Y')}.")
-                        else:
-                            discharge = float(row['discharge_max'].iloc[0]) if 'discharge_max' in row.columns and not pd.isna(row['discharge_max'].iloc[0]) else None
-                            ratio = discharge / baseline if baseline and discharge else None
-                            risk_level, risk_color = determine_risk_level(ratio)
-
-                            # Display metrics
-                            st.markdown(f"### Forecast for {date.strftime('%B %d, %Y')}")
-                            col1, col2, col3, col4 = st.columns(4)
-                            
-                            with col1:
-                                st.metric(
-                                    "Forecast (m³/s)", 
-                                    f"{discharge:.2f}" if discharge else "-"
-                                )
-                            
-                            with col2:
-                                st.metric(
-                                    "Baseline (m³/s)", 
-                                    f"{baseline:.2f}" if baseline else "-"
-                                )
-                            
-                            with col3:
-                                st.metric(
-                                    "Ratio", 
-                                    f"{ratio:.2f}" if ratio else "-"
-                                )
-                            
-                            with col4:
-                                st.markdown(f"""
-                                <div style="background-color:{risk_color}; padding:10px; border-radius:5px; text-align:center;">
-                                    <span style="color:white; font-weight:bold;">Risk: {risk_level}</span>
-                                </div>
-                                """, unsafe_allow_html=True)
-                    
-                    except Exception as e:
-                        st.error(f"Error processing forecast data: {e}")
-                
-        elif mode == "Historical":
-            st.subheader("📜 Historical Data")
-            
-            if 'sel_lga' not in st.session_state:
-                st.info("Please select a state and LGA from the dropdown menus above to view historical data.")
-            else:
-                lga = st.session_state['sel_lga']
-                state = st.session_state['sel_state']
-                lat = st.session_state['lat']
-                lon = st.session_state['lon']
-                baseline = baseline_map.get(lga)
-                
-                with st.form("historical_form"):
-                    date = st.date_input(
-                        "Select Historical Date", 
-                        value=today - datetime.timedelta(days=1), 
-                        min_value=datetime.date(1984, 1, 1), 
-                        max_value=today - datetime.timedelta(days=1)
-                    )
-                    btn = st.form_submit_button("Retrieve Historical Data", use_container_width=True)
-                
-                if btn:
-                    if 'historical_data' in st.session_state:
-                        del st.session_state['historical_data']
-                        
-                    try:
-                        with st.spinner("Fetching historical data..."):
-                            dfh = fetch_open_meteo_historical(lat, lon, date.strftime('%Y-%m-%d'))
-                            if dfh is None or dfh.empty:
-                                st.warning("No historical data available for the selected date.")
-                                st.session_state['historical_data'] = None
-                            else:
-                                if 'date' not in dfh.columns or 'discharge_max' not in dfh.columns:
-                                    st.error("Historical data missing required columns: 'date' or 'discharge_max'.")
-                                    st.session_state['historical_data'] = None
-                                    st.stop()
-                                dfh['date'] = dfh['date'].astype(str)
-                                st.session_state['historical_data'] = dfh
-                                discharge = float(dfh['discharge_max'].iloc[0]) if 'discharge_max' in dfh.columns and not pd.isna(dfh['discharge_max'].iloc[0]) else None
-                                ratio = discharge / baseline if baseline and discharge else None
-                                risk_level, risk_color = determine_risk_level(ratio)
-                                
-                                # Display metrics
-                                st.markdown(f"### Historical Data for {date.strftime('%B %d, %Y')}")
-                                col1, col2, col3, col4 = st.columns(4)
-                                with col1:
-                                    st.metric(
-                                        "Observed Discharge (m³/s)", 
-                                        f"{discharge:.2f}" if discharge else "-",
-                                        delta=None,
-                                        delta_color="normal"
-                                    )
-                                with col2:
-                                    st.metric(
-                                        "Baseline (m³/s)", 
-                                        f"{baseline:.2f}" if baseline else "-"
-                                    )
-                                with col3:
-                                    st.metric(
-                                        "Ratio", 
-                                        f"{ratio:.2f}" if ratio else "-"
-                                    )
-                                with col4:
-                                    st.markdown(f"""
-                                    <div style="background-color:{risk_color}; padding:10px; border-radius:5px; text-align:center;">
-                                        <span style="color:white; font-weight:bold;">Risk: {risk_level}</span>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                
-                                # Provide historical context
-                                st.info(f"This shows the historical river discharge value for {st.session_state['sel_lga']} on {date.strftime('%B %d, %Y')}. Historical data helps understand past water levels for reference.")
-                    
-                    except HTTPError as e:
-                        st.error(f"API error: {e}")
-                        st.session_state['historical_data'] = None
-                    except Exception as e:
-                        st.error(f"Error processing historical data: {e}")
-                        st.session_state['historical_data'] = None
-    
-    # Time Series chart
-    if mode == "Forecast" and 'sel_lga' in st.session_state:
-        st.subheader("📈 7-Day Forecast Time Series")
-        
-        lga = st.session_state['sel_lga']
-        lat = st.session_state['lat']
-        lon = st.session_state['lon']
-        baseline = baseline_map.get(lga)
-        
-        # Fetch forecast data
-        if 'forecast_data' not in st.session_state:
-            try:
-                with st.spinner("Fetching forecast data for time series..."):
-                    forecast_data = fetch_open_meteo_forecast(lat, lon, days=FORECAST_DAYS)
-                    if forecast_data is None or forecast_data.empty:
-                        st.error("No forecast data available for the time series.")
-                        forecast_data = None
-                    else:
-                        if 'date' not in forecast_data.columns or 'discharge_max' not in forecast_data.columns:
-                            st.error("Forecast data missing required columns: 'date' or 'discharge_max'.")
-                            forecast_data = None
-                        else:
-                            forecast_data['date'] = forecast_data['date'].astype(str)
-                    st.session_state['forecast_data'] = forecast_data
-            except Exception as e:
-                st.error(f"Error fetching forecast data: {e}")
-                forecast_data = None
-        else:
-            forecast_data = st.session_state['forecast_data']
-            
-        if forecast_data is not None:
-            fig = generate_time_series_chart(forecast_data, lga, baseline)
+            st.markdown(f"### Forecast for {date:%B %d, %Y}")
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Forecast (m³/s)", f"{discharge:.2f}")
+            m2.metric("Baseline (m³/s)", f"{baseline:.2f}" if baseline else "-")
+            m3.metric("Ratio", f"{ratio:.2f}" if ratio else "-")
+            m4.markdown(
+                f"<div style='background-color:{risk_color};padding:10px;border-radius:5px;text-align:center;'>"
+                f"<span style='color:white;font-weight:bold;'>Risk: {risk_level}</span></div>",
+                unsafe_allow_html=True,
+            )
+            fig = generate_time_series_chart(df, lga, baseline)
             if fig:
                 st.plotly_chart(fig, use_container_width=True)
-                
-                # Show risk level explanation
-                st.markdown("""
-                <div style="background-color: #f0f2f6; color: #000; padding: 15px; border-radius: 5px; margin-top: 10px;">
-                    <h4 style="margin-top: 0; color: #000;">Risk Level Indicators:</h4>
-                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                        <div style="width: 15px; height: 15px; background-color: #4CAF50; margin-right: 10px; border-radius: 2px;"></div>
-                        <span><strong>Low Risk</strong>: Current discharge ≤ 80% of baseline</span>
-                    </div>
-                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                        <div style="width: 15px; height: 15px; background-color: #FFC107; margin-right: 10px; border-radius: 2px;"></div>
-                        <span><strong>Medium Risk</strong>: Current discharge between 80-120% of baseline</span>
-                    </div>
-                    <div style="display: flex; align-items: center;">
-                        <div style="width: 15px; height: 15px; background-color: #F44336; margin-right: 10px; border-radius: 2px;"></div>
-                        <span><strong>High Risk</strong>: Current discharge > 120% of baseline</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.warning("No forecast data available to display.")
-            
-    # Forecast methodology
-    if 'sel_lga' in st.session_state:
-        with st.expander("About the Forecast Methodology"):
-            st.markdown("""
-            ### Forecast Details
-            
-            The flood risk assessment is based on comparing current/forecasted river discharge 
-            with baseline values from September 14, 2022, which was during a significant flooding 
-            event in Nigeria.
-            
-            **Risk Calculation:**
-            - Ratio = Current Discharge / Baseline Discharge
-            - Low Risk (Green): Ratio ≤ 0.8
-            - Medium Risk (Yellow): 0.8 < Ratio ≤ 1.2
-            - High Risk (Red): Ratio > 1.2
-            
-            Data is sourced from the Copernicus Global Flood Awareness System (GloFAS) via the 
-            Open-Meteo API, providing river discharge forecasts with global coverage.
-            """)
+
+    else:
+        # Single‐date Historical mode
+        st.subheader("📜 Historical Data")
+        if 'sel_lga' not in st.session_state:
+            st.info("Please select a state and LGA to view historical data.")
+        else:
+            lga = st.session_state['sel_lga']
+            lat = st.session_state['lat']
+            lon = st.session_state['lon']
+            baseline = baseline_map.get(lga)
+
+            hist_date = st.date_input(
+                "Select historical date",
+                min_value=datetime.date(2022, 9, 14),
+                max_value=today,
+                value=today,
+            )
+
+            if ('hist_date_fetched' not in st.session_state or
+                    st.session_state['hist_date_fetched'] != hist_date):
+                try:
+                    with st.spinner("Fetching historical data…"):
+                        hist_df = fetch_open_meteo_historical(
+                            lat,
+                            lon,
+                            start_date=hist_date.strftime("%Y-%m-%d"),
+                        )
+                    if hist_df is None or hist_df.empty:
+                        st.error("No data available for the selected date.")
+                        st.session_state['historical_data'] = None
+                    else:
+                        st.session_state['historical_data'] = hist_df
+                    st.session_state['hist_date_fetched'] = hist_date
+                except Exception as e:
+                    st.error(f"Error fetching historical: {e}")
+                    st.session_state['historical_data'] = None
+
+            hist_df = st.session_state.get('historical_data')
+            if hist_df is None:
+                st.stop()
+
+            obs = float(hist_df.loc[0, 'discharge_max'])
+            ratio = (obs / baseline) if baseline else None
+            risk_level, risk_color = determine_risk_level(ratio)
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Observed (m³/s)", f"{obs:.2f}")
+            c2.metric("Baseline (m³/s)", f"{baseline:.2f}" if baseline else "-")
+            c3.metric("Ratio", f"{ratio:.2f}" if ratio else "-")
+            c4.markdown(
+                f"<div style='background-color:{risk_color};padding:10px;border-radius:5px;text-align:center;'>"
+                f"<span style='color:white;font-weight:bold;'>Risk: {risk_level}</span></div>",
+                unsafe_allow_html=True,
+            )
 
 # Footer
-st.markdown("""
----
-<div style="text-align: center; color: #666;">
-Nigeria Flood Early-Warning Dashboard | Data from Open-Meteo API | Updated: {} UTC<br>
-Maintained and Created by Chibuike Ibebuchi and Itohan-Osa Abu
-</div>
-""".format(datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M")), unsafe_allow_html=True)
+st.markdown(
+    "<hr><p style='text-align:center;'>Maintained and Created by Chibuike Ibebuchi and Itohan-Osa Abu</p>",
+    unsafe_allow_html=True,
+)

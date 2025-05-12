@@ -249,8 +249,13 @@ if mode in ["Forecast", "Historical"]:
                 ratio = current_val / baseline_val if baseline_val else None
 
                 # Determine risk level and colors
-                bg_color = "#e8f5e9" if ratio and ratio <= 0.8 else ("#fff8e1" if ratio <= 1.2 else "#ffebee")
+                bg_color = "#e8f5e9" if ratio and ratio <= 0.8 else ("#fff8e1" if ratio and ratio <= 1.2 else "#ffebee")
                 text_color = "#000"
+
+                # Format values for display
+                baseline_display = f"{baseline_val:.2f}" if baseline_val is not None else "N/A"
+                ratio_display = f"{ratio:.2f}" if ratio is not None else "N/A"
+                risk_display = "Low" if ratio and ratio <= 0.8 else "Medium" if ratio and ratio <= 1.2 else "High" if ratio else "N/A"
 
                 # Display metrics
                 st.markdown(f"""
@@ -259,17 +264,15 @@ if mode in ["Forecast", "Historical"]:
                         <div class='metric-label'>Forecast (m³/s)</div>
                     </div>
                     <div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
-                        <div class='metric-value'>{baseline_val:.2f if baseline_val else 'N/A'}</div>
+                        <div class='metric-value'>{baseline_display}</div>
                         <div class='metric-label'>Baseline (m³/s)</div>
                     </div>
                     <div class='metric-container' style='background-color: #f7f7f7; color: #000;'>
-                        <div class='metric-value'>{ratio:.2f if ratio else 'N/A'}</div>
+                        <div class='metric-value'>{ratio_display}</div>
                         <div class='metric-label'>Ratio</div>
                     </div>
                     <div class='metric-container' style='background-color: {bg_color}; color: {text_color};'>
-                        <div class='metric-value'>
-                            {'Low' if ratio and ratio <= 0.8 else 'Medium' if ratio and ratio <= 1.2 else 'High' if ratio else 'N/A'}
-                        </div>
+                        <div class='metric-value'>{risk_display}</div>
                         <div class='metric-label'>Flood Risk Level</div>
                     </div>
                 """, unsafe_allow_html=True)
